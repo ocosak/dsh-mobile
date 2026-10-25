@@ -14,6 +14,7 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -78,6 +79,8 @@ fun DshApp(store: PairingStore, api: DshRemoteClient) {
     val sessionsVm: SessionsViewModel = viewModel(factory = factory)
     val chatVm: ChatViewModel = viewModel(factory = factory)
     val tabs = remember { listOf(Tab.Pair, Tab.Sessions, Tab.Settings) }
+    // 聊天模型初始值与设置页保存的值一致。
+    LaunchedEffect(Unit) { chatVm.setModel(store.model.orEmpty()) }
 
     // 极简底部导航：细分割线 + 素色底，不用悬浮毛玻璃条，
     // 选中项黑/白、未选中灰，无 Material 药丸指示器。
@@ -94,7 +97,13 @@ fun DshApp(store: PairingStore, api: DshRemoteClient) {
                     tabs.forEach { tab ->
                         NavigationBarItem(
                             selected = current == tab.route,
-                            onClick = { navController.navigate(tab.route) { launchSingleTop = true } },
+                            onClick = {
+                                navController.navigate(tab.route) {
+                                    launchSingleTop = true
+                                    restoreState = true
+                                    popUpTo(navController.graph.startDestinationId) { saveState = true }
+                                }
+                            },
                             icon = {
                                 Icon(
                                     imageVector = when (tab) {
@@ -121,14 +130,26 @@ fun DshApp(store: PairingStore, api: DshRemoteClient) {
     ) { padding ->
         NavHost(
             navController = navController,
-            startDestination = Tab.Pair.route,
+            startDestination = if (store.isPaired) Tab.Sessions.route else Tab.Pair.route,
             modifier = Modifier.padding(padding),
         ) {
-            composable(Tab.Pair.route) { PairingScreen(pairingVm) }
+            composable(Tab.Pair.route) {
+                PairingScreen(pairingVm, onPaired = {
+                    navController.navigate(Tab.Sessions.route) {
+                        launchSingleTop = true
+                        restoreState = true
+                        popUpTo(navController.graph.startDestinationId) { saveState = true }
+                    }
+                })
+            }
             composable(Tab.Sessions.route) {
-                SessionsScreen(sessionsVm) { id, title ->
-                    navController.navigate("chat/$id?title=" + android.net.Uri.encode(title))
-                }
+                SessionsScreen(
+                    sessionsVm,
+                    onOpenSession = { id, title ->
+                        navController.navigate("chat/$id?title=" + android.net.Uri.encode(title))
+                    },
+                    onOpenSettings = { navController.navigate(Tab.Settings.route) { launchSingleTop = true } },
+                )
             }
             composable(
                 route = "chat/{sessionId}?title={title}",
@@ -139,7 +160,13 @@ fun DshApp(store: PairingStore, api: DshRemoteClient) {
             ) { entry ->
                 val id = entry.arguments?.getString("sessionId").orEmpty()
                 val title = entry.arguments?.getString("title").orEmpty()
-                ChatScreen(id, title, chatVm)
+                ChatScreen(
+                    id, title, chatVm,
+                    onBack = { navController.popBackStack() },
+                ) { model ->
+                    store.model = model
+                    chatVm.setModel(model)
+                }
             }
             composable(Tab.Settings.route) {
                 SettingsScreen(pairingVm, store) { model -> chatVm.setModel(model) }
