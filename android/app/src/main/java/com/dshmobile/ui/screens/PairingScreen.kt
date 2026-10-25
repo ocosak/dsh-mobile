@@ -9,7 +9,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TextButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -64,10 +63,9 @@ fun PairingScreen(viewModel: PairingViewModel) {
             if (state.paired) {
                 TextButton(
                     onClick = viewModel::disconnect,
-                    colors = TextButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
                     modifier = Modifier.padding(top = 8.dp),
                 ) {
-                    Text("断开连接 / 撤销本设备")
+                    Text("断开连接 / 撤销本设备", color = MaterialTheme.colorScheme.error)
                 }
             }
             StatusPill(paired = state.paired, modifier = Modifier.padding(top = 12.dp))
