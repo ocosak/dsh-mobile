@@ -32,11 +32,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.dshmobile.ui.theme.DeepSeekBlue
 
 /** 大标题：页面顶部，中文标题 + 可选副标题。 */
 @Composable
@@ -73,6 +73,7 @@ fun AppTextField(
     placeholder: String,
     modifier: Modifier = Modifier,
     singleLine: Boolean = true,
+    password: Boolean = false,
 ) {
     OutlinedTextField(
         value = value,
@@ -80,6 +81,7 @@ fun AppTextField(
         placeholder = { Text(placeholder, color = MaterialTheme.colorScheme.onSurfaceVariant) },
         modifier = modifier.fillMaxWidth().heightIn(min = 48.dp),
         singleLine = singleLine,
+        visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None,
         textStyle = TextStyle(fontSize = 16.sp, lineHeight = 22.sp),
         shape = RoundedCornerShape(12.dp),
         colors = OutlinedTextFieldDefaults.colors(
@@ -157,17 +159,6 @@ fun ErrorState(message: String) {
     Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
         Text("出错了", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.error)
         Text(message, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp))
-    }
-}
-
-/** AI 头像：DeepSeek 蓝圆底 + 白色 D，不用图片资源。 */
-@Composable
-fun AssistantAvatar(modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier.size(28.dp).clip(CircleShape).background(DeepSeekBlue),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text("D", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
     }
 }
 
