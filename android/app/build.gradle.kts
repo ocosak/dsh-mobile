@@ -14,13 +14,30 @@ android {
         applicationId = "com.dshmobile"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "1.0.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    // Release signing is configured only when the keystore password env vars
+    // are present (CI reads them from GitHub Actions Secrets). Builds without
+    // those vars keep the previous unsigned-release behavior.
+    signingConfigs {
+        if (System.getenv("KEYSTORE_PASSWORD") != null) {
+            create("release") {
+                storeFile = file("release.keystore")
+                storePassword = System.getenv("KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("KEY_ALIAS")
+                keyPassword = System.getenv("KEY_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
         release {
+            if (signingConfigs.findByName("release") != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
