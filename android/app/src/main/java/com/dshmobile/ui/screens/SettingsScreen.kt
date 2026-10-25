@@ -8,7 +8,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TextButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -33,10 +32,9 @@ fun SettingsScreen(
             StatusPill(paired = pairingState.paired, modifier = Modifier.padding(top = 12.dp))
             TextButton(
                 onClick = pairingViewModel::disconnect,
-                colors = TextButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
                 modifier = Modifier.padding(top = 8.dp),
             ) {
-                Text("清除凭据")
+                Text("清除凭据", color = MaterialTheme.colorScheme.error)
             }
             Text(
                 "清除凭据只会清掉这台手机。还要在主机上撤销该设备（或在配对页点断开连接），主机才会停止接受它。",
