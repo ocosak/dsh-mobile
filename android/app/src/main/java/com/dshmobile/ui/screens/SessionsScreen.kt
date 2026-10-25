@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
@@ -28,10 +29,7 @@ import androidx.compose.ui.unit.dp
 import com.dshmobile.ui.SessionsViewModel
 
 /**
- * Sessions — iOS inset grouped list in glass cards.
- * Swipe a row to delete (iOS-style gesture, with a visible Delete
- * action as well, so the gesture is discoverable and reversible
- * in intent: deletion is confirmed by the swipe completing).
+ * 会话页：素色历史列表，不套卡片；左滑删除，底部细分割线。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -44,23 +42,32 @@ fun SessionsScreen(
     LaunchedEffect(Unit) { viewModel.refresh() }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        LargeTitle("Sessions", subtitle = "Your agent conversations")
-        GlassCard {
-            IosTextField(value = newTitle, onValueChange = { newTitle = it }, placeholder = "New session title")
-            IosButton(text = "Create session", onClick = { viewModel.create(newTitle); newTitle = "" }, modifier = Modifier.padding(top = 12.dp))
+        LargeTitle("会话", subtitle = "与主机智能体的对话记录")
+        Column(modifier = Modifier.padding(horizontal = 20.dp)) {
+            AppTextField(value = newTitle, onValueChange = { newTitle = it }, placeholder = "新会话标题")
+            PrimaryButton(
+                text = "新建会话",
+                onClick = { viewModel.create(newTitle); newTitle = "" },
+                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+            )
         }
+        Text(
+            text = "左滑会话可删除",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp),
+        )
         if (state.busy && state.sessions.isEmpty()) {
-            LoadingState("Loading sessions…")
+            LoadingState()
         }
         state.message?.let { ErrorState(it) }
         if (!state.busy && state.sessions.isEmpty() && state.message == null) {
             EmptyState(
-                title = "No sessions yet",
-                body = "Create one above, then open it to chat with your dsh host.",
-                modifier = Modifier.padding(top = 12.dp),
+                title = "还没有会话",
+                body = "新建一个会话，开始和主机智能体对话。",
             )
         }
-        LazyColumn(modifier = Modifier.fillMaxSize().padding(top = 12.dp, bottom = 8.dp)) {
+        LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth().padding(top = 12.dp)) {
             items(state.sessions, key = { it.id }) { session ->
                 val dismissState = rememberSwipeToDismissBoxState(
                     confirmValueChange = { value ->
@@ -73,26 +80,24 @@ fun SessionsScreen(
                     state = dismissState,
                     enableDismissFromStartToEnd = false,
                     backgroundContent = {
-                        Box(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp), contentAlignment = Alignment.CenterEnd) {
-                            Text("Delete", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelLarge)
+                        Box(modifier = Modifier.fillMaxSize().padding(end = 20.dp), contentAlignment = Alignment.CenterEnd) {
+                            Text("删除", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelLarge)
                         }
                     },
-                    modifier = Modifier.padding(bottom = 8.dp),
                 ) {
-                    GlassCard {
-                        Row(modifier = Modifier.fillMaxWidth()) {
-                            Column(
-                                modifier = Modifier.weight(1f)
-                                    .clickable { onOpenSession(session.id, session.title) }
-                                    .padding(vertical = 4.dp),
-                            ) {
+                    Column(modifier = Modifier.fillMaxWidth().clickable { onOpenSession(session.id, session.title) }) {
+                        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp)) {
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(session.title, style = MaterialTheme.typography.bodyLarge)
-                                session.model?.let {
-                                    Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
-                                Text("Swipe left to delete  ›", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(
+                                    text = session.model ?: "点击进入对话",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(top = 2.dp),
+                                )
                             }
                         }
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outline)
                     }
                 }
             }
