@@ -11,7 +11,11 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.dshmobile.data.PairingStore
 import com.dshmobile.ui.PairingViewModel
@@ -24,12 +28,36 @@ fun SettingsScreen(
     onModelChange: (String) -> Unit,
 ) {
     val pairingState by pairingViewModel.state.collectAsState()
+    // 模型输入必须用本地状态：store 不是 State，直接读它做输入框的值
+    // 会导致打字不显示（上一个版本的真 bug）。
+    var modelText by remember { mutableStateOf(store.model.orEmpty()) }
+    val context = LocalContext.current
+    val versionName = remember {
+        try {
+            @Suppress("DEPRECATION")
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName
+        } catch (_: Exception) {
+            null
+        }
+    }
     Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         LargeTitle("设置", subtitle = "服务器、模型与连接")
         SectionLabel("服务器")
         Column(modifier = Modifier.padding(horizontal = 20.dp)) {
             AppTextField(value = pairingState.serverUrl, onValueChange = pairingViewModel::onServerUrlChange, placeholder = "服务器地址")
             StatusPill(paired = pairingState.paired, modifier = Modifier.padding(top = 12.dp))
+            store.deviceName?.let {
+                Text("本设备：$it", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
+            }
+            TextButton(
+                onClick = pairingViewModel::checkStatus,
+                modifier = Modifier.padding(top = 4.dp),
+            ) {
+                Text("检查服务器状态")
+            }
+            pairingState.message?.let {
+                Text(it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
+            }
             TextButton(
                 onClick = pairingViewModel::disconnect,
                 modifier = Modifier.padding(top = 8.dp),
@@ -45,7 +73,13 @@ fun SettingsScreen(
         }
         SectionLabel("模型")
         Column(modifier = Modifier.padding(horizontal = 20.dp)) {
-            AppTextField(value = store.model.orEmpty(), onValueChange = { v -> store.model = v; onModelChange(v) }, placeholder = "默认模型（可选）")
+            AppTextField(value = modelText, onValueChange = { v -> modelText = v; store.model = v; onModelChange(v) }, placeholder = "默认模型（可选）")
+            Text(
+                "模型名由主机控制，填错会在聊天时报错。",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 8.dp),
+            )
         }
         SectionLabel("连接方式")
         Column(modifier = Modifier.padding(horizontal = 20.dp)) {
@@ -55,6 +89,7 @@ fun SettingsScreen(
                 modifier = Modifier.padding(top = 8.dp),
             )
         }
+        versionName?.let { Footnote("版本 $it") }
         VerticalSpacer(32)
     }
 }
