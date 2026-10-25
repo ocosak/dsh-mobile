@@ -209,12 +209,14 @@ export ANDROID_SDK_ROOT=~/workspace/android-sdk
 
 ## What v1 does
 
-- [x] iOS-style native UI: Pair / Sessions / Chat / Settings tabs
-- [x] Pairing (paste token), pairing status, disconnect/revoke
-- [x] Sessions list / create / delete (rename via API interface)
-- [x] Native chat: message list, streaming text, tool-call cards
+- [x] Chinese UI in ChatGPT/Codex-app style: Sessions home (big title, Recents, bottom search pill + new-chat button), chat thread (black user bubbles, plain assistant text, collapsible history)
+- [x] Pairing (paste token), server status check, pairing status, disconnect/revoke
+- [x] Sessions list / create / delete / rename, local search, grouped by Today / Earlier, 15s polling refresh while the list is visible, new session opens at once
+- [x] Native chat: history load on open, message list, streaming text, tool-call cards (Chinese status), copy-assistant-message, minimal markdown (fences, headers, bullets, bold, inline code), stop-generation button, failed send restores its draft
+- [x] Swipe-to-delete reveals a Delete button first (no accidental full-swipe delete); pairing success jumps straight to the session list; Settings shows the app version
+- [x] Bare LAN addresses default to http (bare public addresses still default to https)
 - [x] Approval prompt UI (approve / deny)
-- [x] Model picker placeholder (free-text, host-controlled names)
+- [x] Model quick-switch dialog in chat and in Settings (free-text, host-controlled names)
 - [x] Attach button wired to the upload adapter
 - [x] Encrypted credential storage, header-only transport
 - [x] Single `ApiEndpoints` file isolating every endpoint path
@@ -251,8 +253,7 @@ export ANDROID_SDK_ROOT=~/workspace/android-sdk
 - Verified end-to-end chat against a real dsh host
 - Verified file upload (endpoint + multipart shape unconfirmed —
   the app says so in-app instead of faking success)
-- Session rename UI (API exists; no rename row in v1 UI)
-- Offline / background sync, push notifications
+- Offline / background sync, push notifications (the list polls only while visible; no background push channel yet)
 
 ## Verification steps (user with a real dsh host must do)
 
