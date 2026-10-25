@@ -20,6 +20,18 @@ interface DshRemoteApi {
     suspend fun renameSession(baseUrl: String, deviceCredential: String, id: String, title: String): Result<Unit>
     suspend fun deleteSession(baseUrl: String, deviceCredential: String, id: String): Result<Unit>
 
+    /**
+     * Load a session's message history (desktop parity: opening a
+     * session shows its history, not an empty screen).
+     * TODO (adapter-needed): response shape not confirmed against a
+     * real host; the client parses tolerantly and surfaces failures.
+     */
+    suspend fun listMessages(
+        baseUrl: String,
+        deviceCredential: String,
+        sessionId: String,
+    ): Result<List<ChatMessage>>
+
     /** Streaming chat. Emits text deltas, tool calls and approval prompts. */
     fun sendMessage(
         baseUrl: String,
