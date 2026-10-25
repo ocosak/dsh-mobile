@@ -2,6 +2,7 @@ package com.dshmobile.ui.screens
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -23,7 +24,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -31,6 +36,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -38,58 +44,244 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.first
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.dshmobile.data.ChatMessage
+import com.dshmobile.data.ToolCall
 import com.dshmobile.ui.ChatViewModel
 
+/** Tool-call status in Chinese (the host only sends the enum name). */
+private fun toolStatusText(status: ToolCall.Status): String = when (status) {
+    ToolCall.Status.PENDING -> "待处理"
+    ToolCall.Status.APPROVED -> "已批准"
+    ToolCall.Status.DENIED -> "已拒绝"
+    ToolCall.Status.RUNNING -> "进行中"
+    ToolCall.Status.DONE -> "已完成"
+    ToolCall.Status.FAILED -> "失败"
+}
+
+private data class MdBlock(val code: Boolean, val text: String)
+
+private fun splitMdBlocks(text: String): List<MdBlock> {
+    val out = mutableListOf<MdBlock>()
+    val current = StringBuilder()
+    var inCode = false
+    for (line in text.lines()) {
+        if (line.trimStart().startsWith("```")) {
+            if (current.isNotEmpty()) {
+                out += MdBlock(inCode, current.toString().trimEnd('\n'))
+                current.clear()
+            }
+            inCode = !inCode
+        } else {
+            current.append(line).append('\n')
+        }
+    }
+    if (current.isNotEmpty()) out += MdBlock(inCode, current.toString())
+    return out
+}
+
+/** Only **bold** and `code` are interpreted; unmatched markers stay literal, never dropped. */
+private fun inlineAnnotated(text: String, codeBg: Color): AnnotatedString {
+    val builder = AnnotatedString.Builder()
+    var i = 0
+    while (i < text.length) {
+        when {
+            text.startsWith("**", i) -> {
+                val end = text.indexOf("**", i + 2)
+                if (end > i + 2) {
+                    builder.withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(text.substring(i + 2, end)) }
+                    i = end + 2
+                } else {
+                    builder.append("**")
+                    i += 2
+                }
+            }
+            text[i] == '`' -> {
+                val end = text.indexOf('`', i + 1)
+                if (end > i + 1) {
+                    builder.withStyle(SpanStyle(fontFamily = FontFamily.Monospace, background = codeBg)) { append(text.substring(i + 1, end)) }
+                    i = end + 1
+                } else {
+                    builder.append('`')
+                    i++
+                }
+            }
+            else -> {
+                builder.append(text[i])
+                i++
+            }
+        }
+    }
+    return builder.toAnnotatedString()
+}
+
+/** Minimal markdown for assistant replies: fences, headers, bullets, bold, inline code. */
+@Composable
+private fun AssistantMessageText(text: String) {
+    val codeBg = MaterialTheme.colorScheme.surfaceVariant
+    Column {
+        for (block in splitMdBlocks(text)) {
+            if (block.code) {
+                Surface(
+                    modifier = Modifier.padding(vertical = 4.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    color = codeBg,
+                ) {
+                    Text(
+                        text = block.text,
+                        style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                        modifier = Modifier.padding(12.dp),
+                    )
+                }
+            } else {
+                for (line in block.text.lines()) {
+                    when {
+                        line.startsWith("# ") -> Text(inlineAnnotated(line.removePrefix("# "), codeBg), style = MaterialTheme.typography.titleLarge)
+                        line.startsWith("## ") -> Text(inlineAnnotated(line.removePrefix("## "), codeBg), style = MaterialTheme.typography.titleMedium)
+                        line.startsWith("### ") -> Text(inlineAnnotated(line.removePrefix("### "), codeBg), style = MaterialTheme.typography.titleMedium)
+                        line.startsWith("- ") || line.startsWith("* ") -> Row {
+                            Text("•  ", style = MaterialTheme.typography.bodyLarge)
+                            Text(inlineAnnotated(line.substring(2), codeBg), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                        }
+                        else -> Text(inlineAnnotated(line, codeBg), style = MaterialTheme.typography.bodyLarge)
+                    }
+                }
+            }
+        }
+    }
+}
+
 /**
- * 聊天页（ChatGPT iOS 版式）：白画布、用户右侧浅灰气泡、
- * AI 左侧纯文本 + 头像、底部悬浮圆角输入框、黑色圆形发送键。
- * 模型不在这里改，去设置里改；顶部只显示当前模型名。
+ * 对话页（参考 Codex iOS 对话页布局）：顶部返回 + 标题 + 模型，
+ * 用户消息黑色气泡、AI 回复纯文本不套气泡；历史多时先只看最近
+ * 几条，点“查看更早的消息”再展开；底部圆角输入框。
  */
 @Composable
 fun ChatScreen(
     sessionId: String,
     sessionTitle: String,
     viewModel: ChatViewModel,
+    onBack: () -> Unit,
+    onModelChange: (String) -> Unit,
 ) {
     val state by viewModel.state.collectAsState()
-    var input by remember { mutableStateOf("") }
+    var input by remember(sessionId) { mutableStateOf("") }
+    // 发送失败（传输中断）时把原文本还回输入框，免得重打；只认本会话的，
+    // 别会话的失败不串到这里（切回原会话时再恢复）。
+    val failedDraft = state.failedDraft
+    LaunchedEffect(failedDraft) {
+        if (failedDraft != null && failedDraft.first == sessionId) {
+            input = failedDraft.second
+            viewModel.clearFailedDraft()
+        }
+    }
+    // 按会话区分：历史消息 id 是 h-序号，各会话会重复，直接 remember 会串。
+    var copiedId by remember(sessionId) { mutableStateOf<String?>(null) }
+    var showModelDialog by remember { mutableStateOf(false) }
+    var modelDraft by remember { mutableStateOf("") }
+    var showAll by remember(sessionId) { mutableStateOf(false) }
+    val clipboardManager = LocalClipboardManager.current
     val listState = rememberLazyListState()
 
-    // 有新消息且用户本来就在底部时，跟随到底部；用户往上翻时不抢滚动。
-    LaunchedEffect(state.messages.size) {
-        val lastIndex = state.messages.size - 1
-        if (lastIndex >= 0) {
-            val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
-            if (lastVisible >= lastIndex - 1) listState.scrollToItem(lastIndex)
+    // 打开会话即加载历史（桌面端行为）；切会话时重新加载。
+    LaunchedEffect(sessionId) { viewModel.loadHistory(sessionId) }
+
+    // 历史折叠：超过 8 条时先只看最近 6 条，和 Codex 的“更早消息”一致。
+    val visibleMessages = remember(state.messages, showAll) {
+        if (showAll || state.messages.size <= 8) state.messages
+        else state.messages.takeLast(6)
+    }
+    val collapsedCount = state.messages.size - visibleMessages.size
+
+    // 首次加载历史后定位到底部（桌面端打开会话的行为）；之后有新消息
+    // 且用户本来就在底部时，跟随到底部；用户往上翻时不抢滚动。
+    var initialScrollDone by remember(sessionId) { mutableStateOf(false) }
+    LaunchedEffect(visibleMessages.size, showAll) {
+        if (!initialScrollDone && visibleMessages.isNotEmpty()) {
+            val expected = visibleMessages.size + if (collapsedCount > 0) 1 else 0
+            snapshotFlow { listState.layoutInfo.totalItemsCount }.first { it >= expected }
+            listState.scrollToItem(expected - 1)
+            initialScrollDone = true
+        } else {
+            val total = listState.layoutInfo.totalItemsCount
+            if (total > 0 && visibleMessages.isNotEmpty()) {
+                val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+                if (lastVisible >= total - 2) listState.scrollToItem(total - 1)
+            }
         }
     }
 
+    if (showModelDialog) {
+        AlertDialog(
+            onDismissRequest = { showModelDialog = false },
+            title = { Text("切换模型") },
+            text = {
+                AppTextField(value = modelDraft, onValueChange = { modelDraft = it }, placeholder = "模型名（留空用主机默认）")
+            },
+            confirmButton = {
+                TextButton(onClick = { onModelChange(modelDraft); showModelDialog = false }) { Text("保存") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showModelDialog = false }) { Text("取消") }
+            },
+        )
+    }
+
     Column(modifier = Modifier.fillMaxSize().imePadding()) {
-        Text(
-            text = sessionTitle,
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp),
-        )
-        Text(
-            text = if (state.model.isBlank()) "默认模型" else state.model,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 2.dp, bottom = 8.dp),
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = onBack, modifier = Modifier.size(44.dp)) {
+                Icon(Icons.Filled.ArrowBack, contentDescription = "返回")
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(sessionTitle, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    text = if (state.streaming) "生成中…" else if (state.model.isBlank()) "默认模型" else state.model,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.clickable { modelDraft = state.model; showModelDialog = true },
+                )
+            }
+            IconButton(onClick = { modelDraft = state.model; showModelDialog = true }, modifier = Modifier.size(44.dp)) {
+                Icon(Icons.Filled.Edit, contentDescription = "切换模型")
+            }
+        }
         HorizontalDivider(color = MaterialTheme.colorScheme.outline)
         LazyColumn(
             state = listState,
             modifier = Modifier.weight(1f),
             contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
         ) {
-            itemsIndexed(state.messages, key = { _, m -> m.id }) { index, msg ->
+            if (collapsedCount > 0) {
+                item {
+                    Box(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
+                        Text(
+                            text = "查看更早的 $collapsedCount 条消息 ›",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.clickable { showAll = true }.padding(8.dp),
+                        )
+                    }
+                }
+            }
+            itemsIndexed(visibleMessages, key = { _, m -> m.id }, contentType = { _, m -> m.role }) { index, msg ->
                 val isUser = msg.role == ChatMessage.Role.USER
-                val groupedWithPrevious = index > 0 && state.messages[index - 1].role == msg.role
+                val groupedWithPrevious = index > 0 && visibleMessages[index - 1].role == msg.role
                 val topPadding = if (groupedWithPrevious) 4.dp else 12.dp
                 if (isUser) {
                     Box(
@@ -97,8 +289,10 @@ fun ChatScreen(
                         contentAlignment = Alignment.CenterEnd,
                     ) {
                         Surface(
+                            modifier = Modifier.widthIn(max = 300.dp),
                             shape = RoundedCornerShape(22.dp, 22.dp, 6.dp, 22.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            color = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary,
                         ) {
                             Text(
                                 text = msg.text,
@@ -108,26 +302,31 @@ fun ChatScreen(
                         }
                     }
                 } else {
-                    Row(modifier = Modifier.fillMaxWidth().padding(top = topPadding, bottom = 2.dp)) {
-                        AssistantAvatar()
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            if (msg.text.isEmpty()) {
-                                if (state.streaming) TypingIndicator() else Text("")
-                            } else {
-                                Text(text = msg.text, style = MaterialTheme.typography.bodyLarge)
-                            }
-                            msg.toolCalls.forEach { tc ->
-                                Surface(
-                                    modifier = Modifier.padding(top = 8.dp).widthIn(max = 300.dp),
-                                    shape = RoundedCornerShape(12.dp),
-                                    color = MaterialTheme.colorScheme.surface,
-                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                                ) {
-                                    Column(modifier = Modifier.padding(12.dp)) {
-                                        Text("工具：${tc.name}", style = MaterialTheme.typography.labelLarge)
-                                        Text(tc.status.name, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    }
+                    Column(modifier = Modifier.fillMaxWidth().padding(top = topPadding, bottom = 2.dp)) {
+                        if (msg.text.isEmpty()) {
+                            if (state.streaming) TypingIndicator() else Text("")
+                        } else {
+                            AssistantMessageText(msg.text)
+                            Text(
+                                text = if (copiedId == msg.id) "已复制" else "复制",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.clickable {
+                                    clipboardManager.setText(AnnotatedString(msg.text))
+                                    copiedId = msg.id
+                                }.padding(vertical = 4.dp),
+                            )
+                        }
+                        msg.toolCalls.forEach { tc ->
+                            Surface(
+                                modifier = Modifier.padding(top = 8.dp).widthIn(max = 300.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.surface,
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Text("工具：${tc.name}", style = MaterialTheme.typography.labelLarge)
+                                    Text(toolStatusText(tc.status), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }
                         }
@@ -137,7 +336,7 @@ fun ChatScreen(
             if (state.messages.isEmpty()) {
                 item {
                     EmptyState(
-                        title = "开始对话",
+                        title = "今天想做什么？",
                         body = "在下方输入消息，主机智能体会在这里回复，工具调用会以卡片形式展示。",
                     )
                 }
@@ -202,7 +401,7 @@ fun ChatScreen(
                         decorationBox = { innerTextField ->
                             Box {
                                 if (input.isEmpty()) {
-                                    Text("给智能体发消息…", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text("问智能体…", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                                 innerTextField()
                             }
@@ -210,20 +409,24 @@ fun ChatScreen(
                     )
                 }
                 val canSend = input.isNotBlank() && !state.streaming
+                val showStop = state.streaming
                 IconButton(
-                    onClick = { viewModel.send(sessionId, input); input = "" },
-                    enabled = canSend,
+                    onClick = {
+                        if (showStop) viewModel.stopGenerating()
+                        else if (input.isNotBlank()) { viewModel.send(sessionId, input); input = "" }
+                    },
+                    enabled = canSend || showStop,
                     modifier = Modifier.size(44.dp),
                 ) {
                     Box(
                         modifier = Modifier.size(36.dp).clip(CircleShape)
-                            .background(if (canSend) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline),
+                            .background(if (canSend || showStop) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline),
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
-                            Icons.Filled.Send,
-                            contentDescription = "发送",
-                            tint = if (canSend) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            if (showStop) Icons.Filled.Stop else Icons.Filled.Send,
+                            contentDescription = if (showStop) "停止生成" else "发送",
+                            tint = if (canSend || showStop) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(18.dp),
                         )
                     }
