@@ -1,0 +1,10 @@
+# dsh-mobile-remote — Cordis patch layer.
+# TODO (adapter-needed): verify the exact patch shape against the dsh
+# version on the host before installing. dsh is in developer preview
+# and its plugin surface can break between releases. The minimal
+# "first plugin" shape is: one insert row naming this module.
+# Mount it with: dsh plugin --profile web add <this package>
+# then restart `dsh web`.
+- insert:
+    - id: dsh-mobile-remote
+      name: 'dsh-mobile-remote'
