@@ -3,26 +3,22 @@ package com.dshmobile
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Surface
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.unit.dp
-import com.dshmobile.ui.theme.IosGlass
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -61,9 +57,9 @@ class MainActivity : ComponentActivity() {
 }
 
 private sealed class Tab(val route: String, val label: String) {
-    data object Pair : Tab("pair", "Pair")
-    data object Sessions : Tab("sessions", "Sessions")
-    data object Settings : Tab("settings", "Settings")
+    data object Pair : Tab("pair", "配对")
+    data object Sessions : Tab("sessions", "会话")
+    data object Settings : Tab("settings", "设置")
 }
 
 @Composable
@@ -83,47 +79,41 @@ fun DshApp(store: PairingStore, api: DshRemoteClient) {
     val chatVm: ChatViewModel = viewModel(factory = factory)
     val tabs = remember { listOf(Tab.Pair, Tab.Sessions, Tab.Settings) }
 
-    // Floating Liquid-Glass tab bar: translucent, specular-bordered,
-    // 28dp rounded, soft shadow, floating above content with inset
-    // padding. Scaffold still reserves its height, so content never
-    // slides underneath it and no bar overlaps the chat composer.
-    val darkBar = isSystemInDarkTheme()
+    // 极简底部导航：细分割线 + 素色底，不用悬浮毛玻璃条，
+    // 选中项黑/白、未选中灰，无 Material 药丸指示器。
     Scaffold(
         bottomBar = {
             val backStack by navController.currentBackStackEntryAsState()
             val current = backStack?.destination?.route
-            Box(
-                modifier = Modifier.fillMaxWidth()
-                    .padding(start = 16.dp, end = 16.dp, bottom = 12.dp, top = 4.dp),
-            ) {
-                Surface(
-                    modifier = Modifier.fillMaxWidth()
-                        .heightIn(min = 64.dp)
-                        .shadow(16.dp, RoundedCornerShape(28.dp), spotColor = IosGlass.shadow(darkBar)),
-                    shape = RoundedCornerShape(28.dp),
-                    color = IosGlass.surfaceStrong(darkBar),
-                    border = BorderStroke(1.dp, IosGlass.border(darkBar)),
+            Column {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+                NavigationBar(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 0.dp,
                 ) {
-                    NavigationBar(
-                        containerColor = androidx.compose.ui.graphics.Color.Transparent,
-                    ) {
-                        tabs.forEach { tab ->
-                            NavigationBarItem(
-                                selected = current == tab.route,
-                                onClick = { navController.navigate(tab.route) { launchSingleTop = true } },
-                                icon = {
-                                    Icon(
-                                        imageVector = when (tab) {
-                                            Tab.Pair -> Icons.Filled.Link
-                                            Tab.Sessions -> Icons.Filled.Home
-                                            Tab.Settings -> Icons.Filled.Settings
-                                        },
-                                        contentDescription = tab.label,
-                                    )
-                                },
-                                label = { Text(tab.label) },
-                            )
-                        }
+                    tabs.forEach { tab ->
+                        NavigationBarItem(
+                            selected = current == tab.route,
+                            onClick = { navController.navigate(tab.route) { launchSingleTop = true } },
+                            icon = {
+                                Icon(
+                                    imageVector = when (tab) {
+                                        Tab.Pair -> Icons.Filled.Link
+                                        Tab.Sessions -> Icons.Filled.Home
+                                        Tab.Settings -> Icons.Filled.Settings
+                                    },
+                                    contentDescription = tab.label,
+                                )
+                            },
+                            label = { Text(tab.label) },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = MaterialTheme.colorScheme.primary,
+                                selectedTextColor = MaterialTheme.colorScheme.primary,
+                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                indicatorColor = Color.Transparent,
+                            ),
+                        )
                     }
                 }
             }
@@ -132,7 +122,7 @@ fun DshApp(store: PairingStore, api: DshRemoteClient) {
         NavHost(
             navController = navController,
             startDestination = Tab.Pair.route,
-            modifier = Modifier.padding(padding).padding(bottom = 4.dp),
+            modifier = Modifier.padding(padding),
         ) {
             composable(Tab.Pair.route) { PairingScreen(pairingVm) }
             composable(Tab.Sessions.route) {
@@ -144,7 +134,7 @@ fun DshApp(store: PairingStore, api: DshRemoteClient) {
                 route = "chat/{sessionId}?title={title}",
                 arguments = listOf(
                     navArgument("sessionId") { type = NavType.StringType },
-                    navArgument("title") { type = NavType.StringType; defaultValue = "Session" },
+                    navArgument("title") { type = NavType.StringType; defaultValue = "会话" },
                 ),
             ) { entry ->
                 val id = entry.arguments?.getString("sessionId").orEmpty()
