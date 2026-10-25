@@ -1,16 +1,15 @@
 package com.dshmobile.ui.screens
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -22,11 +21,8 @@ import androidx.compose.ui.unit.dp
 import com.dshmobile.ui.PairingViewModel
 
 /**
- * Pairing screen — latest-iOS language: large title, grouped glass
- * cards, 44dp+ targets, 16sp inputs. v1 input is PASTE (not QR scan):
- * paste the pairing link/token shown on the host's "Remote access"
- * panel. QR scanning is a roadmap item, labelled as such.
- * The stored device credential is never displayed here.
+ * 配对页：素色分段表单。v1 只支持粘贴配对码（不支持扫码），
+ * 设备凭据永远不在这里展示。
  */
 @Composable
 fun PairingScreen(viewModel: PairingViewModel) {
@@ -37,49 +33,54 @@ fun PairingScreen(viewModel: PairingViewModel) {
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
     ) {
-        LargeTitle("Pair device", subtitle = "Connect this phone to your dsh host")
-        SectionLabel("Host")
-        GlassCard {
-            Text("Server base URL", style = MaterialTheme.typography.labelLarge)
-            IosTextField(
+        LargeTitle("配对设备", subtitle = "把这台手机连接到你的 dsh 主机")
+        SectionLabel("主机")
+        Column(modifier = Modifier.padding(horizontal = 20.dp)) {
+            Text("服务器地址", style = MaterialTheme.typography.labelLarge)
+            AppTextField(
                 value = state.serverUrl, onValueChange = viewModel::onServerUrlChange,
-                placeholder = "https://your-host.example or http://192.168.x.x:3080",
+                placeholder = "例如 http://192.168.x.x:3080",
                 modifier = Modifier.padding(top = 8.dp),
             )
             Text(
-                "Use the LAN address on your own network, or the tunnel URL your host plugin advertises. Never expose dsh directly to the public internet without pairing + revocation.",
+                "用同一局域网内的地址，或者主机插件给出的隧道地址。不要在没有配对和撤销保护的情况下把 dsh 直接暴露到公网。",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 8.dp),
             )
         }
-        SectionLabel("Pairing")
-        GlassCard {
-            Text("Pairing token (paste)", style = MaterialTheme.typography.labelLarge)
-            IosTextField(value = token, onValueChange = { token = it }, placeholder = "Paste the token from the host panel", modifier = Modifier.padding(top = 8.dp))
-            Text("Device name", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 16.dp))
-            IosTextField(value = deviceName, onValueChange = { deviceName = it }, placeholder = "e.g. My Android phone", modifier = Modifier.padding(top = 8.dp))
-            Row(modifier = Modifier.padding(top = 16.dp)) {
-                IosButton(text = if (state.paired) "Re-pair" else "Pair", onClick = { viewModel.pair(token, deviceName) }, enabled = !state.busy)
-            }
+        SectionLabel("配对")
+        Column(modifier = Modifier.padding(horizontal = 20.dp)) {
+            Text("配对码（粘贴）", style = MaterialTheme.typography.labelLarge)
+            AppTextField(value = token, onValueChange = { token = it }, placeholder = "从主机面板粘贴配对码", modifier = Modifier.padding(top = 8.dp))
+            Text("设备名称", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 16.dp))
+            AppTextField(value = deviceName, onValueChange = { deviceName = it }, placeholder = "例如 我的安卓手机", modifier = Modifier.padding(top = 8.dp))
+            PrimaryButton(
+                text = if (state.paired) "重新配对" else "配对",
+                onClick = { viewModel.pair(token, deviceName) },
+                enabled = !state.busy,
+                modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+            )
             if (state.paired) {
-                OutlinedButton(onClick = viewModel::disconnect, modifier = Modifier.padding(top = 8.dp)) {
-                    Text("Disconnect / revoke this device")
+                TextButton(
+                    onClick = viewModel::disconnect,
+                    colors = TextButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    modifier = Modifier.padding(top = 8.dp),
+                ) {
+                    Text("断开连接 / 撤销本设备")
                 }
             }
-            Text(
-                text = if (state.paired) "Status: paired" else "Status: not paired",
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(top = 12.dp),
-            )
+            StatusPill(paired = state.paired, modifier = Modifier.padding(top = 12.dp))
             state.message?.let {
                 Text(text = it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
             }
         }
-        SectionLabel("QR scan")
-        GlassCard {
-            Text("QR scanning is not in v1. Paste the token above instead. The host panel still shows a QR code — the token inside it is what you paste.")
-        }
+        SectionLabel("扫码")
+        Text(
+            text = "暂不支持扫码：v1 请粘贴上面的配对码。主机面板上的二维码里就是这个码。",
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.padding(horizontal = 20.dp),
+        )
         VerticalSpacer(32)
     }
 }
