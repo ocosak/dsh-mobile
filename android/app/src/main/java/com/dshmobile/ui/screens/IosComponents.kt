@@ -1,7 +1,6 @@
 package com.dshmobile.ui.screens
 
 import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.StartOffset
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
@@ -181,8 +180,7 @@ fun TypingIndicator(modifier: Modifier = Modifier) {
             val alpha by transition.animateFloat(
                 initialValue = 0.3f,
                 targetValue = 1f,
-                animationSpec = infiniteRepeatable(tween(600), RepeatMode.Reverse),
-                initialStartOffset = StartOffset(i * 200),
+                animationSpec = infiniteRepeatable(tween(durationMillis = 600, delayMillis = i * 200), RepeatMode.Reverse),
                 label = "dot$i",
             )
             Box(
