@@ -2,12 +2,13 @@ package com.dshmobile.ui.screens
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -16,7 +17,7 @@ import androidx.compose.ui.unit.dp
 import com.dshmobile.data.PairingStore
 import com.dshmobile.ui.PairingViewModel
 
-/** Settings — grouped glass sections, 44dp targets, 16sp inputs. */
+/** 设置页：素色分段列表。 */
 @Composable
 fun SettingsScreen(
     pairingViewModel: PairingViewModel,
@@ -25,32 +26,34 @@ fun SettingsScreen(
 ) {
     val pairingState by pairingViewModel.state.collectAsState()
     Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-        LargeTitle("Settings", subtitle = "Server, model and connection")
-        SectionLabel("Server")
-        GlassCard {
-            IosTextField(value = pairingState.serverUrl, onValueChange = pairingViewModel::onServerUrlChange, placeholder = "Server base URL")
+        LargeTitle("设置", subtitle = "服务器、模型与连接")
+        SectionLabel("服务器")
+        Column(modifier = Modifier.padding(horizontal = 20.dp)) {
+            AppTextField(value = pairingState.serverUrl, onValueChange = pairingViewModel::onServerUrlChange, placeholder = "服务器地址")
+            StatusPill(paired = pairingState.paired, modifier = Modifier.padding(top = 12.dp))
+            TextButton(
+                onClick = pairingViewModel::disconnect,
+                colors = TextButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                modifier = Modifier.padding(top = 8.dp),
+            ) {
+                Text("清除凭据")
+            }
             Text(
-                text = if (pairingState.paired) "Paired" else "Not paired",
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(top = 12.dp),
-            )
-            IosButton(text = "Clear credentials", onClick = pairingViewModel::disconnect, modifier = Modifier.padding(top = 12.dp))
-            Text(
-                "Clearing credentials only wipes this phone. Also revoke the device on the host (or use Disconnect on the Pair screen) so the host stops accepting it.",
+                "清除凭据只会清掉这台手机。还要在主机上撤销该设备（或在配对页点断开连接），主机才会停止接受它。",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 8.dp),
             )
         }
-        SectionLabel("Model")
-        GlassCard {
-            IosTextField(value = store.model.orEmpty(), onValueChange = { v -> store.model = v; onModelChange(v) }, placeholder = "Default model (optional)")
+        SectionLabel("模型")
+        Column(modifier = Modifier.padding(horizontal = 20.dp)) {
+            AppTextField(value = store.model.orEmpty(), onValueChange = { v -> store.model = v; onModelChange(v) }, placeholder = "默认模型（可选）")
         }
-        SectionLabel("Connection mode")
-        GlassCard {
-            Text("LAN: use the host's LAN address on the same network. Tunnel: use the tunnel URL the host plugin advertises. Cloudflare / fixed-relay tunnelling is out of scope for this app's v1 — use the host plugin's tunnel, or a manual tunnel you control, and keep pairing + revocation on.")
+        SectionLabel("连接方式")
+        Column(modifier = Modifier.padding(horizontal = 20.dp)) {
+            Text("局域网：用同一网络内的主机地址。隧道：用主机插件给出的隧道地址。Cloudflare / 固定中继隧道不在本应用 v1 范围内，请用主机插件的隧道或你自己控制的手动隧道，并保持配对和撤销开启。")
             Text(
-                "A paired device is a full-control credential: it can drive the host agent. Only pair devices you control.",
+                "已配对的设备拥有主机的完整操控权：可以驱动主机智能体。只配对你自己控制的设备。",
                 modifier = Modifier.padding(top = 8.dp),
             )
         }
