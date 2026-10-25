@@ -4,5 +4,8 @@ build/
 android/app/build/
 android/.gradle/
 *.apk
+*.jks
+*.keystore
+android/app/release.keystore
 node_modules/
 .DS_Store
