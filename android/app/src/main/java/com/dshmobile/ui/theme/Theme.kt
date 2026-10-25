@@ -15,80 +15,58 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-// Latest-iOS design language, adapted to Android Compose.
-// This is NOT native iOS: there is no UIKit blur API here. "Liquid
-// Glass" is approximated with translucent surfaces, a specular
-// top-edge highlight, soft shadows and rounded geometry, over a
-// subtly tinted grouped background — the same visual language,
-// rendered with Compose primitives only.
+// ChatGPT iOS 版式的干净聊天风：白画布、素色、少装饰。
+// 用户消息右侧浅灰气泡（22dp 圆角），AI 消息左侧纯文本 + 小头像，
+// 底部悬浮圆角输入框 + 黑色圆形发送按钮。深色用 #171717 系。
+// 不再用之前的半透明毛玻璃语言，也不用 Material 默认配色。
 
-private val IosBlue = Color(0xFF007AFF)
-private val IosBlueDark = Color(0xFF0A84FF)
-
-/** Translucent glass tokens, resolved per theme at call sites. */
-object IosGlass {
-    // Frosted surface: mostly opaque for legibility on Android
-    // (true backdrop blur is not a Compose primitive), with a
-    // translucent tint so content beneath still reads through.
-    fun surface(dark: Boolean): Color =
-        if (dark) Color(0xFF1C1C1E).copy(alpha = 0.78f)
-        else Color.White.copy(alpha = 0.72f)
-    fun surfaceStrong(dark: Boolean): Color =
-        if (dark) Color(0xFF2C2C2E).copy(alpha = 0.85f)
-        else Color.White.copy(alpha = 0.88f)
-    // Specular edge highlight: bright on the top/leading edge.
-    fun specular(dark: Boolean): Color =
-        if (dark) Color.White.copy(alpha = 0.22f)
-        else Color.White.copy(alpha = 0.65f)
-    fun border(dark: Boolean): Color =
-        if (dark) Color.White.copy(alpha = 0.12f)
-        else Color.Black.copy(alpha = 0.06f)
-    fun shadow(dark: Boolean): Color =
-        if (dark) Color.Black.copy(alpha = 0.45f)
-        else Color.Black.copy(alpha = 0.10f)
-    // Tinted grouped background, light and dark, iOS system-grey style.
-    fun background(dark: Boolean): Color =
-        if (dark) Color(0xFF000000) else Color(0xFFF2F2F7)
-}
+/** DeepSeek 蓝，只用于 AI 头像和少量强调，不做大面积底色。 */
+val DeepSeekBlue = Color(0xFF4D6BFE)
+val DeepSeekBlueDark = Color(0xFF7A8CFF)
 
 private val LightScheme = lightColorScheme(
-    primary = IosBlue,
+    primary = Color.Black,
     onPrimary = Color.White,
-    background = Color(0xFFF2F2F7),
-    surface = Color.White,
-    onBackground = Color(0xFF000000),
-    onSurface = Color(0xFF000000),
-    surfaceVariant = Color(0xFFE5E5EA),
-    onSurfaceVariant = Color(0xFF8A8A8E),
+    secondary = DeepSeekBlue,
+    background = Color.White,
+    surface = Color(0xFFF9F9F9),
+    surfaceVariant = Color(0xFFF4F4F4),
+    onBackground = Color.Black,
+    onSurface = Color.Black,
+    onSurfaceVariant = Color(0xFF6B6B6B),
+    outline = Color(0xFFE5E5E5),
+    error = Color(0xFFFF3B30),
 )
 private val DarkScheme = darkColorScheme(
-    primary = IosBlueDark,
-    onPrimary = Color.White,
-    background = Color(0xFF000000),
-    surface = Color(0xFF1C1C1E),
+    primary = Color.White,
+    onPrimary = Color.Black,
+    secondary = DeepSeekBlueDark,
+    background = Color(0xFF171717),
+    surface = Color(0xFF212121),
+    surfaceVariant = Color(0xFF2F2F2F),
     onBackground = Color.White,
     onSurface = Color.White,
-    surfaceVariant = Color(0xFF2C2C2E),
-    onSurfaceVariant = Color(0xFF98989D),
+    onSurfaceVariant = Color(0xFFA3A3A3),
+    outline = Color(0xFF333333),
+    error = Color(0xFFFF6961),
 )
 
-// Latest-iOS geometry: generous radii, 20-28dp for cards/bars.
-private val IosShapes = Shapes(
+private val ChatShapes = Shapes(
     small = RoundedCornerShape(12.dp),
-    medium = RoundedCornerShape(20.dp),
-    large = RoundedCornerShape(28.dp),
+    medium = RoundedCornerShape(16.dp),
+    large = RoundedCornerShape(22.dp),
+    extraLarge = RoundedCornerShape(28.dp),
 )
 
-// SF-style hierarchy: large title, headline, body, footnote.
-// System font on Android approximates SF; weights/sizes follow iOS.
-private val IosTypography = Typography(
-    displayLarge = TextStyle(fontFamily = FontFamily.Default, fontWeight = FontWeight.Bold, fontSize = 34.sp, lineHeight = 41.sp),
-    titleLarge = TextStyle(fontFamily = FontFamily.Default, fontWeight = FontWeight.Bold, fontSize = 28.sp, lineHeight = 34.sp),
-    titleMedium = TextStyle(fontFamily = FontFamily.Default, fontWeight = FontWeight.SemiBold, fontSize = 20.sp, lineHeight = 25.sp),
-    bodyLarge = TextStyle(fontFamily = FontFamily.Default, fontWeight = FontWeight.Normal, fontSize = 17.sp, lineHeight = 22.sp),
-    bodyMedium = TextStyle(fontFamily = FontFamily.Default, fontWeight = FontWeight.Normal, fontSize = 16.sp, lineHeight = 21.sp),
+private val ChatTypography = Typography(
+    displayLarge = TextStyle(fontFamily = FontFamily.Default, fontWeight = FontWeight.Bold, fontSize = 28.sp, lineHeight = 34.sp),
+    titleLarge = TextStyle(fontFamily = FontFamily.Default, fontWeight = FontWeight.Bold, fontSize = 22.sp, lineHeight = 28.sp),
+    titleMedium = TextStyle(fontFamily = FontFamily.Default, fontWeight = FontWeight.SemiBold, fontSize = 17.sp, lineHeight = 22.sp),
+    bodyLarge = TextStyle(fontFamily = FontFamily.Default, fontWeight = FontWeight.Normal, fontSize = 17.sp, lineHeight = 24.sp),
+    bodyMedium = TextStyle(fontFamily = FontFamily.Default, fontWeight = FontWeight.Normal, fontSize = 16.sp, lineHeight = 22.sp),
     labelLarge = TextStyle(fontFamily = FontFamily.Default, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, lineHeight = 21.sp),
     labelMedium = TextStyle(fontFamily = FontFamily.Default, fontWeight = FontWeight.Normal, fontSize = 13.sp, lineHeight = 18.sp),
+    labelSmall = TextStyle(fontFamily = FontFamily.Default, fontWeight = FontWeight.Normal, fontSize = 12.sp, lineHeight = 16.sp),
 )
 
 @Composable
@@ -98,8 +76,8 @@ fun DshMobileTheme(
 ) {
     MaterialTheme(
         colorScheme = if (darkTheme) DarkScheme else LightScheme,
-        typography = IosTypography,
-        shapes = IosShapes,
+        typography = ChatTypography,
+        shapes = ChatShapes,
         content = content,
     )
 }
