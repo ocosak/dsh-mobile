@@ -1,7 +1,9 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
-    id("org.jetbrains.kotlin.plugin.compose")
+    // Note: org.jetbrains.kotlin.plugin.compose does not exist for Kotlin 1.9.x;
+    // it was introduced in Kotlin 2.0. For Kotlin 1.9, Compose is enabled via
+    // buildFeatures.compose + composeOptions.kotlinCompilerExtensionVersion below.
 }
 
 android {
