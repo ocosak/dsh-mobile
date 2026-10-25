@@ -25,18 +25,26 @@ jobs:
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platform-tools" "platforms;android-34" "build-tools;34.0.0"
 
-      - name: Build debug APK
+      - name: Decode release keystore
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > android/app/release.keystore
+
+      - name: Build release APK
         uses: gradle/gradle-build-action@v3
         with:
           gradle-version: "8.7"
-          arguments: assembleDebug
+          arguments: assembleRelease
           build-root-directory: android
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
 
-      - name: Upload debug APK artifact
+      - name: Upload release APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: dsh-mobile-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: dsh-mobile-release-apk
+          path: android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
 
   release:
@@ -46,16 +54,16 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Download debug APK artifact
+      - name: Download release APK artifact
         uses: actions/download-artifact@v4
         with:
-          name: dsh-mobile-debug-apk
+          name: dsh-mobile-release-apk
           path: apk
 
       - name: Publish release APK
         uses: softprops/action-gh-release@v2
         with:
-          files: apk/app-debug.apk
+          files: apk/app-release.apk
           body: |
-            DSH Mobile debug APK (native Android client + dsh plugin source in this repo).
-            This is a debug build for testing against your own dsh host. See README.md for pairing and verification steps.
+            DSH Mobile release APK (signed, native Android client + dsh plugin source in this repo).
+            Test it against your own dsh host. See README.md for pairing and verification steps.
