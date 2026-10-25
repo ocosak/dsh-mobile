@@ -21,8 +21,8 @@ import java.util.concurrent.TimeUnit
  *   forwarded anywhere else by this client.
  * - Pairing tokens are used once, in a POST body, and never logged.
  * - Base URLs must be http(s). A user-typed host without a scheme is
- *   normalised to https first (LAN http is allowed only if the user
- *   types http:// explicitly — see PairingScreen's LAN note).
+ *   normalised to http for local-looking hosts (localhost, *.local,
+ *   10/172.16-31/192.168) and to https otherwise.
  * - No API key, password, tunnel token or real server URL is baked in.
  */
 class DshRemoteClient(
@@ -35,10 +35,16 @@ class DshRemoteClient(
 
     private fun normalisedBase(raw: String): String {
         val trimmed = raw.trim().trimEnd('/')
-        return when {
-            trimmed.startsWith("http://") || trimmed.startsWith("https://") -> trimmed
-            else -> "https://$trimmed"
-        }
+        if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) return trimmed
+        // A bare address with no scheme used to become https, which silently
+        // broke LAN hosts (they are almost always plain http). Local-looking
+        // hosts default to http; everything else still defaults to https.
+        val host = trimmed.substringBefore('/').substringBefore(':')
+        val secondOctet = host.split(".").getOrNull(1)?.toIntOrNull()
+        val isLocal = host == "localhost" || host == "127.0.0.1" || host.endsWith(".local") ||
+            host.startsWith("192.168.") || host.startsWith("10.") ||
+            (host.startsWith("172.") && secondOctet != null && secondOctet in 16..31)
+        return (if (isLocal) "http://" else "https://") + trimmed
     }
 
     private fun Request.Builder.deviceHeader(credential: String) =
@@ -108,7 +114,9 @@ class DshRemoteClient(
 
     private fun parseSessions(body: String): List<DshSession> {
         val arr: JSONArray = try {
-            JSONObject(body).optJSONArray("sessions") ?: JSONArray(body)
+            JSONObject(body).optJSONArray("sessions")
+                ?: JSONObject(body).optJSONArray("data")
+                ?: JSONArray(body)
         } catch (_: Exception) {
             JSONArray(body)
         }
@@ -148,8 +156,18 @@ class DshRemoteClient(
             http.newCall(req).execute().use { resp ->
                 val body = resp.body?.string().orEmpty()
                 if (!resp.isSuccessful) throw IllegalStateException("Create session failed: HTTP ${resp.code}")
-                parseSessions("[$body]").firstOrNull()
-                    ?: DshSession(id = JSONObject(body).optString("id"), title = title)
+                val nested = try {
+                    JSONObject(body).optJSONObject("session")?.let { o ->
+                        DshSession(
+                            id = o.optString("id"),
+                            title = o.optString("title").ifEmpty { title },
+                            model = o.optString("model").takeIf { it.isNotEmpty() },
+                        )
+                    }
+                } catch (_: Exception) { null }
+                val wrapped = try { parseSessions("[$body]").firstOrNull() } catch (_: Exception) { null }
+                val directId = try { JSONObject(body).optString("id") } catch (_: Exception) { "" }
+                nested ?: wrapped?.takeIf { it.id.isNotEmpty() } ?: DshSession(id = directId, title = title)
             }
         }
 
@@ -163,6 +181,40 @@ class DshRemoteClient(
             .build()
         http.newCall(req).execute().use { resp ->
             if (!resp.isSuccessful) throw IllegalStateException("Rename failed: HTTP ${resp.code}")
+        }
+    }
+
+    override suspend fun listMessages(
+        baseUrl: String,
+        deviceCredential: String,
+        sessionId: String,
+    ): Result<List<ChatMessage>> = runCatchingResult {
+        val req = Request.Builder()
+            .url(ApiEndpoints.sessionMessages(normalisedBase(baseUrl), sessionId))
+            .deviceHeader(deviceCredential)
+            .get().build()
+        http.newCall(req).execute().use { resp ->
+            val body = resp.body?.string().orEmpty()
+            if (!resp.isSuccessful) throw IllegalStateException("Messages failed: HTTP ${resp.code}")
+            val arr: JSONArray = try {
+                JSONObject(body).optJSONArray("messages") ?: JSONArray(body)
+            } catch (_: Exception) {
+                JSONArray(body)
+            }
+            val out = mutableListOf<ChatMessage>()
+            for (i in 0 until arr.length()) {
+                val o = arr.optJSONObject(i) ?: continue
+                val roleRaw = o.optString("role").lowercase()
+                val text = o.optString("text")
+                    .ifEmpty { o.optString("content") }
+                    .ifEmpty { o.optString("message") }
+                out += ChatMessage(
+                    id = "h-$i",
+                    role = if (roleRaw == "user") ChatMessage.Role.USER else ChatMessage.Role.ASSISTANT,
+                    text = text,
+                )
+            }
+            out
         }
     }
 
@@ -222,6 +274,16 @@ class DshRemoteClient(
                             }
                             json.has("text") -> {
                                 val t = json.optString("text")
+                                full.append(t)
+                                emit(ChatEvent.TextDelta(t))
+                            }
+                            json.has("content") -> {
+                                val t = json.optString("content")
+                                full.append(t)
+                                emit(ChatEvent.TextDelta(t))
+                            }
+                            json.has("message") -> {
+                                val t = json.optString("message")
                                 full.append(t)
                                 emit(ChatEvent.TextDelta(t))
                             }
