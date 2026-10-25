@@ -34,19 +34,19 @@ class PairingViewModel(
     fun pair(token: String, deviceName: String) {
         val base = _state.value.serverUrl
         if (base.isBlank() || token.isBlank()) {
-            _state.update { it.copy(message = "Enter a server URL and a pairing token first.") }
+            _state.update { it.copy(message = "请先填写服务器地址和配对码。") }
             return
         }
         viewModelScope.launch {
             _state.update { it.copy(busy = true, message = null) }
-            val result = api.acceptPairing(base, token.trim(), deviceName.ifBlank { "Android" })
+            val result = api.acceptPairing(base, token.trim(), deviceName.ifBlank { "安卓手机" })
             result.onSuccess { credential ->
                 store.serverUrl = base
                 store.deviceCredential = credential
-                store.deviceName = deviceName.ifBlank { "Android" }
-                _state.update { it.copy(busy = false, paired = true, message = "Paired. This device can now drive the host — keep it locked.") }
+                store.deviceName = deviceName.ifBlank { "安卓手机" }
+                _state.update { it.copy(busy = false, paired = true, message = "已配对。本设备现在可以操控主机，请保持手机锁定。") }
             }.onFailure { e ->
-                _state.update { it.copy(busy = false, message = "Pairing failed: ${e.message}") }
+                _state.update { it.copy(busy = false, message = "配对失败：${e.message}") }
             }
         }
     }
@@ -59,7 +59,7 @@ class PairingViewModel(
                 api.revokeDevice(base, credential)
             }
             store.clear()
-            _state.update { it.copy(paired = false, message = "Disconnected and local credentials cleared.") }
+            _state.update { it.copy(paired = false, message = "已断开连接，本地凭据已清除。") }
         }
     }
 }
@@ -84,7 +84,7 @@ class SessionsViewModel(
             _state.update { it.copy(busy = true, message = null) }
             api.listSessions(base, credential)
                 .onSuccess { list -> _state.update { it.copy(sessions = list, busy = false) } }
-                .onFailure { e -> _state.update { it.copy(busy = false, message = "Could not load sessions: ${e.message}") } }
+                .onFailure { e -> _state.update { it.copy(busy = false, message = "加载会话失败：${e.message}") } }
         }
     }
 
@@ -92,9 +92,9 @@ class SessionsViewModel(
         val base = store.serverUrl ?: return
         val credential = store.deviceCredential ?: return
         viewModelScope.launch {
-            api.createSession(base, credential, title.ifBlank { "New session" })
+            api.createSession(base, credential, title.ifBlank { "新会话" })
                 .onSuccess { refresh() }
-                .onFailure { e -> _state.update { it.copy(message = "Create failed: ${e.message}") } }
+                .onFailure { e -> _state.update { it.copy(message = "创建失败：${e.message}") } }
         }
     }
 
@@ -104,7 +104,7 @@ class SessionsViewModel(
         viewModelScope.launch {
             api.deleteSession(base, credential, id)
                 .onSuccess { refresh() }
-                .onFailure { e -> _state.update { it.copy(message = "Delete failed: ${e.message}") } }
+                .onFailure { e -> _state.update { it.copy(message = "删除失败：${e.message}") } }
         }
     }
 }
@@ -176,7 +176,7 @@ class ChatViewModel(
         // endpoint is not yet verified against a real host (see ApiEndpoints).
         // Show that honestly instead of pretending the upload succeeded.
         _state.update {
-            it.copy(message = "Upload adapter not yet verified for session $sessionId ($fileName). See README verification steps.")
+            it.copy(message = "上传功能尚未在真实主机上验证（会话 $sessionId，文件 $fileName），请按 README 的验证步骤操作。")
         }
     }
 }
