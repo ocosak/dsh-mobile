@@ -98,6 +98,7 @@ import androidx.compose.ui.unit.dp
 import com.dshmobile.data.ChatMessage
 import com.dshmobile.data.ToolCall
 import com.dshmobile.ui.ChatViewModel
+import com.dshmobile.ui.theme.errorButtonColor
 
 /** Tool-call status in Chinese (the host only sends the enum name). */
 private val UserBubbleShape = RoundedCornerShape(22.dp, 22.dp, 6.dp, 22.dp)
@@ -900,7 +901,7 @@ fun ChatScreen(
                     Row(modifier = Modifier.padding(top = 16.dp)) {
                         // 允许是破坏性动作（主机会执行命令/读写文件）：按 HIG 破坏性动作用红，
                         // 不再披主色蓝外衣，与删除/清除凭据的红同一套语言。
-                        PrimaryButton(text = "允许", onClick = { viewModel.answerApproval(sessionId, true) }, enabled = !state.answeringApproval, modifier = Modifier.weight(1f), containerColor = MaterialTheme.colorScheme.error)
+                        PrimaryButton(text = "允许", onClick = { viewModel.answerApproval(sessionId, true) }, enabled = !state.answeringApproval, modifier = Modifier.weight(1f), containerColor = errorButtonColor())
                         Spacer(modifier = Modifier.width(8.dp))
                         OutlinedButton(
                             onClick = { viewModel.answerApproval(sessionId, false) },
@@ -1052,7 +1053,7 @@ fun ChatScreen(
                 ) {
                     Box(
                         modifier = Modifier.size(SEND_BUTTON_SIZE).clip(CircleShape)
-                            .background(if (showStop) MaterialTheme.colorScheme.error else if (canSend) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline),
+                            .background(if (showStop) errorButtonColor() else if (canSend) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline),
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(

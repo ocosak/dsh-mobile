@@ -28,6 +28,22 @@ val IosBlueDark = Color(0xFF0A84FF)
 /** iOS 成功绿：已配对、完成态。 */
 val IosGreen = Color(0xFF34C759)
 
+/**
+ * 深色红按钮容器：白字/白图标写在红底上时不能用提亮后的正文红
+ * #FF6B60（白字对比度会掉到 2.79:1），单独保留较深的 #FF453A
+ * （白字 3.41:1，按钮文案 16sp 半粗体按大字 3:1 计过线）。
+ */
+val IosRedButtonDark = Color(0xFFFF453A)
+
+/**
+ * 红按钮容器色：浅色直接用 error（#D70015，白字 5.38:1）；
+ * 深色用单独的深红（见 IosRedButtonDark）。红字正文一律走
+ * MaterialTheme.colorScheme.error，不要走这里。
+ */
+@Composable
+fun errorButtonColor(): Color =
+    if (isSystemInDarkTheme()) IosRedButtonDark else MaterialTheme.colorScheme.error
+
 private val LightScheme = lightColorScheme(
     primary = IosBlue,
     onPrimary = Color.White,
@@ -44,7 +60,10 @@ private val LightScheme = lightColorScheme(
     // 实际深色面（分组底 #1C1C1E 5.93:1、卡片 #2C2C2E 4.85:1）上都过线，不动。
     onSurfaceVariant = Color(0xFF6E6E73),
     outline = Color(0xFFE5E5EA),
-    error = Color(0xFFFF3B30),
+    // 系统红 #FF3B30 加深到 #D70015：旧色在白底上只有 3.55:1、
+    // 在分组灰底上只有 3.18:1，正文达不到 WCAG AA 的 4.5:1；新色在
+    // 白底 5.38:1、在分组灰底 4.83:1，两处都过线，仍是纯红系。
+    error = Color(0xFFD70015),
     // M3 的容器色（对话框、菜单等）不定义会漏 Material 默认紫调；iOS 语言里
     // 容器就是画布色，全部对齐 surface（白），surfaceTint 同理。
     surfaceTint = Color.White,
@@ -65,7 +84,11 @@ private val DarkScheme = darkColorScheme(
     onSurface = Color.White,
     onSurfaceVariant = Color(0xFF98989D),
     outline = Color(0xFF38383A),
-    error = Color(0xFFFF453A),
+    // 系统红 #FF453A 提亮到 #FF6B60：旧色在卡片面 #2C2C2E 上只有
+    // 4.09:1，正文达不到 4.5:1；新色在卡片面 4.99:1、在分组底
+    // #1C1C1E 上 6.10:1，两处都过线。注意：这个色只给红字正文，
+    // 红按钮容器不能用它（白字会掉到 2.79:1），按钮走 errorButtonColor()。
+    error = Color(0xFFFF6B60),
     // 深色容器同样对齐 surface（#2C2C2E），不漏 Material 默认紫调。
     surfaceTint = Color(0xFF2C2C2E),
     surfaceContainerLowest = Color(0xFF2C2C2E),
