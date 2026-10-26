@@ -4,7 +4,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.invokeOnCancellation
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
@@ -464,9 +463,12 @@ class DshRemoteClient(
                 .build()
             // 取消要能打断阻塞读：流式读超时是 0（无限），以前取消只停收集端、
             // 读线程还在阻塞读里，job 完不成、streaming 卡住。把 call 挂到 job 的
-            // 取消上，取消时 call.cancel() 让阻塞读抛 IOException（见下方 catch）。
+            // 完成回调上：取消时回调跑、call.cancel() 让阻塞读抛 IOException
+            // （见下方 catch）；正常完成时回调也跑，但那时 call 已完成、cancel
+            // 是空操作。注意不能用 invokeOnCancellation：它在协程库里是内部
+            // 接口，外部访问不了（运行 #48 的教训）。
             val call = streamHttp.newCall(req)
-            currentCoroutineContext()[Job]?.invokeOnCancellation { call.cancel() }
+            currentCoroutineContext()[Job]?.invokeOnCompletion { call.cancel() }
             call.execute().use { resp ->
                 if (!resp.isSuccessful) {
                     // 非 2xx 时 body 里常有 {"error": "..."}：以前直接丢掉，
