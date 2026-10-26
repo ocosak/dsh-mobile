@@ -20,6 +20,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -49,7 +50,6 @@ import com.dshmobile.ui.screens.SettingsScreen
 import com.dshmobile.ui.theme.DshMobileTheme
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Settings
 
 class MainActivity : ComponentActivity() {
@@ -66,7 +66,6 @@ class MainActivity : ComponentActivity() {
 }
 
 private sealed class Tab(val route: String, val label: String) {
-    data object Pair : Tab("pair", "配对")
     data object Sessions : Tab("sessions", "会话")
     data object Settings : Tab("settings", "设置")
 }
@@ -86,30 +85,43 @@ fun DshApp(store: PairingStore, api: DshRemoteClient) {
     val pairingVm: PairingViewModel = viewModel(factory = factory)
     val sessionsVm: SessionsViewModel = viewModel(factory = factory)
     val chatVm: ChatViewModel = viewModel(factory = factory)
-    val tabs = remember { listOf(Tab.Pair, Tab.Sessions, Tab.Settings) }
+    val tabs = remember { listOf(Tab.Sessions, Tab.Settings) }
     // 聊天模型初始值与设置页保存的值一致。
     LaunchedEffect(Unit) { chatVm.setModel(store.model.orEmpty()) }
 
-    // 标准 iOS 标签栏：贴底、半透明底 + 顶部细分隔线，不再是悬浮药丸；
+    // 进入流程：先配对、后主页。未配对时整个应用就是配对页，没有
+    // 标签栏、进不了会话和设置；配对成功（或启动时已配对）才进主页，
+    // 主页只有会话和设置两个标签。设置里清除凭据后 paired 翻回 false，
+    // 这里会自动回到配对页；想换主机就走设置里清除凭据再重新配对。
+    val pairingState by pairingVm.state.collectAsState()
+    if (!pairingState.paired) {
+        PairingScreen(pairingVm, onPaired = {
+            // 配对成功会把 pairingState.paired 翻成 true，上面这个分支
+            // 自己就会切到主页，不用再手动导航一次。
+        })
+        return
+    }
+
+    // 标准 iOS 标签栏：贴底、不透明底 + 顶部细分隔线，不再是悬浮药丸；
     // 进聊天详情页时按 iOS 规范隐藏标签栏，靠聊天页左上角返回。
     val backStack by navController.currentBackStackEntryAsState()
     val current = backStack?.destination?.route
-    val showTabBar = current == Tab.Pair.route || current == Tab.Sessions.route || current == Tab.Settings.route
+    val showTabBar = current == Tab.Sessions.route || current == Tab.Settings.route
+    // 每次从配对页回到主页（包括断开后再重配）都回到会话首页，
+    // 而不是停在上次断开时所在的设置页。主分支离开组合后这个
+    // Effect 会被清掉，重进时才会再跑一次，页内切标签不会触发它。
+    LaunchedEffect(Unit) {
+        navController.navigate(Tab.Sessions.route) {
+            launchSingleTop = true
+            popUpTo(navController.graph.startDestinationId) { saveState = false }
+        }
+    }
     Box(modifier = Modifier.fillMaxSize()) {
         NavHost(
             navController = navController,
-            startDestination = if (store.isPaired) Tab.Sessions.route else Tab.Pair.route,
+            startDestination = Tab.Sessions.route,
             modifier = Modifier.fillMaxSize(),
         ) {
-            composable(Tab.Pair.route) {
-                PairingScreen(pairingVm, onPaired = {
-                    navController.navigate(Tab.Sessions.route) {
-                        launchSingleTop = true
-                        restoreState = true
-                        popUpTo(navController.graph.startDestinationId) { saveState = true }
-                    }
-                })
-            }
             composable(Tab.Sessions.route) {
                 SessionsScreen(
                     sessionsVm,
@@ -165,9 +177,11 @@ private fun IosTabBar(
     onTab: (Tab) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // 标签栏用不透明底：半透明底会让滚动内容在它下面透出来，
+    // 截图里配对按钮和设置页最后一张卡就是被它盖住一半。
     Column(
         modifier = modifier.fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)),
+            .background(MaterialTheme.colorScheme.surface),
     ) {
         HorizontalDivider(color = MaterialTheme.colorScheme.outline, thickness = 0.5.dp)
         Row(
@@ -178,7 +192,6 @@ private fun IosTabBar(
                 IosTabItem(
                     selected = current == tab.route,
                     icon = when (tab) {
-                        Tab.Pair -> Icons.Filled.Link
                         Tab.Sessions -> Icons.Filled.Home
                         Tab.Settings -> Icons.Filled.Settings
                     },

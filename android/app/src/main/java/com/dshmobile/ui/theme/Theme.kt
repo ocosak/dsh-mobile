@@ -41,7 +41,11 @@ private val LightScheme = lightColorScheme(
     surfaceVariant = Color(0xFFF2F2F7),
     onBackground = Color.Black,
     onSurface = Color.Black,
-    onSurfaceVariant = Color(0xFF8A8A8E),
+    // 次要灰从 #8A8A8E 加深到 #6E6E73：旧色在白底上对比度只有 3.44:1、
+    // 在分组灰底上只有 3.08:1，达不到 WCAG AA 对正文的 4.5:1；新色在白底
+    // 5.07:1、在分组灰底 4.54:1，两处都过线。深色次要灰 #98989D 本来就
+    // 过线（黑底 7.31:1），不动。
+    onSurfaceVariant = Color(0xFF6E6E73),
     outline = Color(0xFFE5E5EA),
     error = Color(0xFFFF3B30),
 )

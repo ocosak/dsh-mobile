@@ -43,16 +43,24 @@ fun SettingsScreen(
     }
     Column(
         modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant)
-            .verticalScroll(rememberScrollState()).padding(bottom = 72.dp),
+            .verticalScroll(rememberScrollState()).padding(bottom = 96.dp),
     ) {
         LargeTitle("设置", subtitle = "服务器、模型与连接")
         SectionLabel("服务器")
         Column(modifier = Modifier.padding(horizontal = 16.dp)) {
             IosCard {
-                IosListRow(title = "连接状态", value = if (pairingState.paired) "已配对" else "未配对", showDivider = false)
+                IosListRow(
+                    title = "连接状态",
+                    value = if (pairingState.paired) "已配对" else "未配对",
+                    showDivider = false,
+                    subtitle = pairingState.serverUrl.ifBlank { "尚未连接主机" },
+                )
             }
             Column(modifier = Modifier.padding(top = 12.dp)) {
                 AppTextField(value = pairingState.serverUrl, onValueChange = pairingViewModel::onServerUrlChange, placeholder = "服务器地址")
+                TextButton(onClick = pairingViewModel::saveServerUrl, modifier = Modifier.padding(top = 4.dp)) {
+                    Text("保存服务器地址")
+                }
                 StatusPill(paired = pairingState.paired, modifier = Modifier.padding(top = 12.dp))
                 store.deviceName?.let {
                     Text("本设备：$it", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
@@ -67,7 +75,7 @@ fun SettingsScreen(
                     Text("清除凭据", color = MaterialTheme.colorScheme.error)
                 }
                 Text(
-                    "清除凭据只会清掉这台手机。还要在主机上撤销该设备（或在配对页点断开连接），主机才会停止接受它。",
+                    "清除凭据只会清掉这台手机。还要在主机上撤销该设备，主机才会停止接受它。清除后应用会回到配对页，想换主机就在那里重新配对。",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 8.dp),

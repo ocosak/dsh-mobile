@@ -41,9 +41,10 @@ fun PairingScreen(viewModel: PairingViewModel, onPaired: () -> Unit) {
         wasPaired = state.paired
     }
 
+    // 配对页现在是进入时的整页（没有标签栏），底部留白不用再给标签栏留 96dp。
     Column(
         modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant)
-            .verticalScroll(rememberScrollState()).padding(bottom = 72.dp),
+            .verticalScroll(rememberScrollState()).padding(bottom = 24.dp),
     ) {
         LargeTitle("配对设备", subtitle = "把这台手机连接到你的 dsh 主机")
         SectionLabel("主机")

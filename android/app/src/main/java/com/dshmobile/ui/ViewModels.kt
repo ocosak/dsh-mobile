@@ -33,11 +33,41 @@ class PairingViewModel(
 
     fun onServerUrlChange(v: String) = _state.update { it.copy(serverUrl = v) }
 
+    /**
+     * 设置页的服务器地址原来只改 ViewModel 状态、不写 store：
+     * 切到会话页用的是 store 里的旧地址，重启后改动直接丢了。
+     * 这个保存按钮把当前地址（去首尾空格、去尾斜杠）写进 store，
+     * 配对页的 pair() 成功时同样只存整理后的地址。
+     */
+    // 服务器地址先整理再校验：去掉首尾空格和尾斜杠（尾斜杠会让拼接
+    // 的接口路径多一个斜杠），再要求必须以 http:// 或 https:// 开头，
+    // 否则 OkHttp 只能报看不懂的错，用户不知道是地址本身写错了。
+    private fun cleanedBase(): String = _state.value.serverUrl.trim().trimEnd('/')
+    private fun isHttpUrl(url: String): Boolean = url.startsWith("http://") || url.startsWith("https://")
+
+    fun saveServerUrl() {
+        val cleaned = cleanedBase()
+        if (cleaned.isBlank()) {
+            _state.update { it.copy(message = "请先填写服务器地址。") }
+            return
+        }
+        if (!isHttpUrl(cleaned)) {
+            _state.update { it.copy(message = "服务器地址要以 http:// 或 https:// 开头，例如 http://192.168.1.10:8080。") }
+            return
+        }
+        store.serverUrl = cleaned
+        _state.update { it.copy(serverUrl = cleaned, message = "服务器地址已保存。") }
+    }
+
     /** Check the host is reachable and report its pairing phase, without pairing. */
     fun checkStatus() {
-        val base = _state.value.serverUrl
+        val base = cleanedBase()
         if (base.isBlank()) {
             _state.update { it.copy(message = "请先填写服务器地址。") }
+            return
+        }
+        if (!isHttpUrl(base)) {
+            _state.update { it.copy(message = "服务器地址要以 http:// 或 https:// 开头，例如 http://192.168.1.10:8080。") }
             return
         }
         viewModelScope.launch {
@@ -53,9 +83,13 @@ class PairingViewModel(
     }
 
     fun pair(token: String, deviceName: String) {
-        val base = _state.value.serverUrl
+        val base = cleanedBase()
         if (base.isBlank() || token.isBlank()) {
             _state.update { it.copy(message = "请先填写服务器地址和配对码。") }
+            return
+        }
+        if (!isHttpUrl(base)) {
+            _state.update { it.copy(message = "服务器地址要以 http:// 或 https:// 开头，例如 http://192.168.1.10:8080。") }
             return
         }
         viewModelScope.launch {
@@ -206,8 +240,16 @@ class ChatViewModel(
 
     fun send(sessionId: String, text: String) {
         if (_state.value.streaming) return
-        val base = store.serverUrl ?: run { _state.update { it.copy(message = "尚未配对，请先在配对页连接主机。") }; return }
-        val credential = store.deviceCredential ?: run { _state.update { it.copy(message = "尚未配对，请先在配对页连接主机。") }; return }
+        // 未配对时聊天页本来会先清输入框再调 send，等于把用户刚打的字丢了；
+        // 这里把原文记成 failedDraft，聊天页的恢复逻辑会把它还回输入框。
+        val base = store.serverUrl ?: run {
+            _state.update { it.copy(message = "尚未配对，请先在配对页连接主机。", failedDraft = sessionId to text) }
+            return
+        }
+        val credential = store.deviceCredential ?: run {
+            _state.update { it.copy(message = "尚未配对，请先在配对页连接主机。", failedDraft = sessionId to text) }
+            return
+        }
         if (text.isBlank()) return
         val userMsg = ChatMessage(id = "u-${System.currentTimeMillis()}", role = ChatMessage.Role.USER, text = text)
         val assistantId = "a-${System.currentTimeMillis()}"

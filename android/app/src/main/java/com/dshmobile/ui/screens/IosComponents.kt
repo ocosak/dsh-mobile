@@ -18,14 +18,18 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -34,7 +38,12 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -88,8 +97,8 @@ fun IosCard(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
 }
 
 /**
- * iOS 分组行：左标题、右灰色值 + 箭头，行间细分隔线。
- * 对照视频里“思考等级 极致 >”“对话长度 标准 >”那类设置行。
+ * iOS 分组行：左标题（下面可带灰色副标题）、右灰色值 + 箭头，行间细分隔线。
+ * 对照视频里设置页“标题 + 灰色副标题 + 右侧值 >”那类行。
  */
 @Composable
 fun IosListRow(
@@ -97,6 +106,7 @@ fun IosListRow(
     value: String? = null,
     onClick: (() -> Unit)? = null,
     showDivider: Boolean = true,
+    subtitle: String? = null,
 ) {
     Column(
         modifier = Modifier.fillMaxWidth()
@@ -106,7 +116,19 @@ fun IosListRow(
             modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.bodyLarge)
+                if (!subtitle.isNullOrEmpty()) {
+                    Text(
+                        subtitle,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
+            }
             if (!value.isNullOrEmpty()) {
                 Text(
                     value,
@@ -129,6 +151,51 @@ fun IosListRow(
         if (showDivider) {
             HorizontalDivider(color = MaterialTheme.colorScheme.outline, modifier = Modifier.padding(start = 0.dp))
         }
+    }
+}
+
+/** 输入框里的紧凑模型药丸：新视频里模型选择在输入区（不是顶部），点开换模型。 */
+@Composable
+fun CompactModelPill(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier.clickable { onClick() },
+        shape = RoundedCornerShape(28.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.widthIn(max = 96.dp),
+            )
+            Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null, modifier = Modifier.size(16.dp))
+        }
+    }
+}
+
+/**
+ * 思考状态行：视频里“思考中…”那行，状态词会轮换（准备/梳理/生成/整理），
+ * 不是主机发来的具体步骤，只是生成中的等待态，流式正文一到就换成正文。
+ */
+@Composable
+fun ThinkingStatus(modifier: Modifier = Modifier) {
+    val labels = listOf("思考中…", "梳理中…", "生成中…", "整理中…")
+    var index by remember { mutableStateOf(0) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(1200)
+            index = (index + 1) % labels.size
+        }
+    }
+    Row(modifier = modifier.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        TypingIndicator()
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(labels[index], style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -171,7 +238,11 @@ fun QuickActionPill(icon: ImageVector, text: String, onClick: () -> Unit, modifi
     }
 }
 
-/** 素色输入框：10dp 圆角，细分隔线边框，聚焦时系统蓝边框，44dp 以上触控高度。 */
+/**
+ * 素色输入框：10dp 圆角，细分隔线边框，聚焦时系统蓝边框，48dp 以上触控高度。
+ * 密码框默认遮住、右上角有眼睛开关：Material 指引是默认遮住、允许临时
+ * 展开核对，配对码粘贴后看一眼再提交，比全程盲打少出错。
+ */
 @Composable
 fun AppTextField(
     value: String,
@@ -181,13 +252,26 @@ fun AppTextField(
     singleLine: Boolean = true,
     password: Boolean = false,
 ) {
+    var showPassword by remember { mutableStateOf(false) }
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
         placeholder = { Text(placeholder, color = MaterialTheme.colorScheme.onSurfaceVariant) },
         modifier = modifier.fillMaxWidth().heightIn(min = 48.dp),
         singleLine = singleLine,
-        visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None,
+        visualTransformation = if (password && !showPassword) PasswordVisualTransformation() else VisualTransformation.None,
+        trailingIcon = if (password) {
+            {
+                IconButton(onClick = { showPassword = !showPassword }) {
+                    Icon(
+                        if (showPassword) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                        contentDescription = if (showPassword) "隐藏" else "显示",
+                    )
+                }
+            }
+        } else {
+            null
+        },
         textStyle = TextStyle(fontSize = 16.sp, lineHeight = 22.sp),
         shape = RoundedCornerShape(10.dp),
         colors = OutlinedTextFieldDefaults.colors(
@@ -197,7 +281,7 @@ fun AppTextField(
     )
 }
 
-/** 主按钮：iOS 系统蓝填充，44dp 以上高度，12dp 圆角。 */
+/** 主按钮：iOS 系统蓝填充，48dp 以上高度，12dp 圆角。 */
 @Composable
 fun PrimaryButton(
     text: String,
@@ -232,9 +316,19 @@ fun VerticalSpacer(heightDp: Int = 8) {
     Spacer(modifier = Modifier.height(heightDp.dp))
 }
 
-/** 空状态：居中纯文字，不套卡片。 */
+/**
+ * 空状态：笔记视频里“插画 + 标题 + 副标题 + 黑色药丸按钮”那套居中空状态，
+ * 这里不用插画、按钮保持本应用的系统蓝（不跟视频的黑钮混色），只在有
+ * 真实动作时才给按钮（没动作就不给，避免点一下没反应的假按钮）。
+ */
 @Composable
-fun EmptyState(title: String, body: String, modifier: Modifier = Modifier) {
+fun EmptyState(
+    title: String,
+    body: String,
+    modifier: Modifier = Modifier,
+    buttonText: String? = null,
+    onButtonClick: (() -> Unit)? = null,
+) {
     Column(
         modifier = modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -247,6 +341,10 @@ fun EmptyState(title: String, body: String, modifier: Modifier = Modifier) {
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(top = 8.dp),
         )
+        if (!buttonText.isNullOrEmpty() && onButtonClick != null) {
+            Spacer(modifier = Modifier.height(16.dp))
+            PrimaryButton(text = buttonText, onClick = onButtonClick)
+        }
     }
 }
 

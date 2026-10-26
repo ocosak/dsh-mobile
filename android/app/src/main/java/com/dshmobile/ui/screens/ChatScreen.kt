@@ -25,13 +25,19 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -57,6 +63,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
@@ -167,10 +174,60 @@ private fun AssistantMessageText(text: String) {
 }
 
 /**
- * 对话页（标准 iOS + 视频里的 Kimi 顶部药丸）：左上角返回、居中模型药丸、
- * 用户消息系统蓝气泡、AI 回复纯文本不套气泡；历史多时先只看最近
- * 几条，点“查看更早的消息”再展开；底部药丸输入框。
+ * 对话页（标准 iOS + 新视频的聊天语言）：顶部单行栏（返回 + 居中会话标题）、
+ * 用户消息系统蓝气泡、AI 回复纯文本不套气泡；生成中先显示“思考中…”轮换状态，
+ * 工具调用收成一行摘要（点开看详情，名字和状态都来自主机实发数据）；历史多时
+ * 先只看最近几条，点“查看更早的消息”再展开；底部药丸输入框里带模型药丸。
  */
+@Composable
+private fun ToolCallsSummary(toolCalls: List<ToolCall>, modifier: Modifier = Modifier) {
+    var expanded by remember { mutableStateOf(false) }
+    if (toolCalls.isEmpty()) return
+    Column(modifier = modifier.padding(vertical = 4.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded }.padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                Icons.Filled.Search,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(16.dp),
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = "已用 ${toolCalls.size} 个工具 · ${toolCalls.first().name}",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            Icon(
+                if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp),
+            )
+        }
+        if (expanded) {
+            toolCalls.forEach { tc ->
+                Surface(
+                    modifier = Modifier.padding(top = 8.dp).widthIn(max = 300.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text("工具：${tc.name}", style = MaterialTheme.typography.labelLarge)
+                        Text(toolStatusText(tc.status), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+        }
+    }
+}
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(
     sessionId: String,
@@ -226,46 +283,64 @@ fun ChatScreen(
         }
     }
 
+    // 换模型是底部弹层：Material 3 的 ModalBottomSheet 默认自带拖拽小横条，
+    // 这里不再自己再画一个，否则会出现上下两个横条。右上角 X + 保存/取消保留。
     if (showModelDialog) {
-        AlertDialog(
+        ModalBottomSheet(
             onDismissRequest = { showModelDialog = false },
-            title = { Text("切换模型") },
-            text = {
-                AppTextField(value = modelDraft, onValueChange = { modelDraft = it }, placeholder = "模型名（留空用主机默认）")
-            },
-            confirmButton = {
-                TextButton(onClick = { onModelChange(modelDraft); showModelDialog = false }) { Text("保存") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showModelDialog = false }) { Text("取消") }
-            },
-        )
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        ) {
+            Column(modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("切换模型", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                    IconButton(onClick = { showModelDialog = false }, modifier = Modifier.size(48.dp)) {
+                        Icon(Icons.Filled.Close, contentDescription = "关闭")
+                    }
+                }
+                AppTextField(
+                    value = modelDraft,
+                    onValueChange = { modelDraft = it },
+                    placeholder = "模型名（留空用主机默认）",
+                    modifier = Modifier.padding(top = 12.dp),
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                PrimaryButton(
+                    text = "保存",
+                    onClick = { onModelChange(modelDraft); showModelDialog = false },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                TextButton(
+                    onClick = { showModelDialog = false },
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                ) { Text("取消") }
+            }
+        }
     }
 
     // 标签栏在聊天详情页按 iOS 规范隐藏，这里不再给它留 96dp 空隙。
     Column(modifier = Modifier.fillMaxSize().imePadding()) {
+        // 新视频的顶部单行栏：左返回、中间居中会话标题、右 48dp 占位保居中；
+        // 模型选择改到下面的输入框里（新视频里模型药丸就在输入区）。
         Row(
             modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = onBack, modifier = Modifier.size(44.dp)) {
+            IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
                 Icon(Icons.Filled.ChevronLeft, contentDescription = "返回")
             }
-            // 居中模型药丸：视频顶部“K3.1 Pro 极速”那种选择器，点开换模型。
             Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                ModelPill(
-                    text = if (state.streaming) "生成中…" else if (state.model.isBlank()) "默认模型" else state.model,
-                    onClick = { modelDraft = state.model; showModelDialog = true },
+                Text(
+                    sessionTitle,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center,
                 )
             }
-            // 右侧留一个 44dp 占位，让药丸真正居中。
-            Spacer(modifier = Modifier.size(44.dp))
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(sessionTitle, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Spacer(modifier = Modifier.size(48.dp))
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outline)
         LazyColumn(
@@ -280,7 +355,8 @@ fun ChatScreen(
                             text = "查看更早的 $collapsedCount 条消息 ›",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.clickable { showAll = true }.padding(8.dp),
+                            // 同上：小字链接也要 48dp 触控高度（行高 18dp + 上下 15dp）。
+                            modifier = Modifier.clickable { showAll = true }.padding(horizontal = 8.dp, vertical = 15.dp),
                         )
                     }
                 }
@@ -310,31 +386,23 @@ fun ChatScreen(
                 } else {
                     Column(modifier = Modifier.fillMaxWidth().padding(top = topPadding, bottom = 2.dp)) {
                         if (msg.text.isEmpty()) {
-                            if (state.streaming) TypingIndicator() else Text("")
+                            // 生成中且正文未到：视频里“思考中…”那行（状态词轮换）。
+                            if (state.streaming) ThinkingStatus() else Text("")
                         } else {
+                            // 工具痕迹放正文上方，像视频里“搜索网页 …”那行，点开看详情。
+                            ToolCallsSummary(msg.toolCalls)
                             AssistantMessageText(msg.text)
                             Text(
                                 text = if (copiedId == msg.id) "已复制" else "复制",
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                // 小字按钮也要 48dp 触控高度：labelMedium 行高 18dp，
+                                // 上下各 15dp 内边距正好 48dp，之前只有 4dp、很难点中。
                                 modifier = Modifier.clickable {
                                     clipboardManager.setText(AnnotatedString(msg.text))
                                     copiedId = msg.id
-                                }.padding(vertical = 4.dp),
+                                }.padding(vertical = 15.dp),
                             )
-                        }
-                        msg.toolCalls.forEach { tc ->
-                            Surface(
-                                modifier = Modifier.padding(top = 8.dp).widthIn(max = 300.dp),
-                                shape = RoundedCornerShape(12.dp),
-                                color = MaterialTheme.colorScheme.surface,
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                            ) {
-                                Column(modifier = Modifier.padding(12.dp)) {
-                                    Text("工具：${tc.name}", style = MaterialTheme.typography.labelLarge)
-                                    Text(toolStatusText(tc.status), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
-                            }
                         }
                     }
                 }
@@ -343,7 +411,7 @@ fun ChatScreen(
                 item {
                     EmptyState(
                         title = "今天想做什么？",
-                        body = "在下方输入消息，主机智能体会在这里回复，工具调用会以卡片形式展示。",
+                        body = "在下方输入消息，主机智能体会在这里回复，工具调用会以摘要行展示，点开看详情。",
                     )
                 }
             }
@@ -353,12 +421,8 @@ fun ChatScreen(
             Column {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outline)
                 Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
-                    Box(
-                        modifier = Modifier.fillMaxWidth(),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Box(modifier = Modifier.size(width = 60.dp, height = 5.dp).clip(RoundedCornerShape(3.dp)).background(MaterialTheme.colorScheme.surfaceVariant))
-                    }
+                    // 审批卡是固定在输入框上方的卡片，不能拖拽，所以不画拖拽小横条
+                    // （小横条只属于可拖拽的底部弹层，画在这里会误导人去拖它）。
                     Text("需要审批", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 12.dp))
                     Text("工具：${approval.toolName}", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
                     Text(approval.description, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
@@ -380,8 +444,18 @@ fun ChatScreen(
                 }
             }
         }
+        // 报错时给重试：历史加载失败、发送失败都只是一行字、没地方重试，
+        // 用户之前只能退出重进；消息为空时（历史没加载出来）才给重试钮。
         state.message?.let {
-            Text(text = it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(text = it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error, modifier = Modifier.weight(1f))
+                if (state.messages.isEmpty()) {
+                    TextButton(onClick = { viewModel.loadHistory(sessionId) }) { Text("重试") }
+                }
+            }
         }
         // 空会话时的快捷药丸：视频里输入框上方那排，点一下只填入输入框，不假装已执行。
         if (state.messages.isEmpty()) {
@@ -404,10 +478,14 @@ fun ChatScreen(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                IconButton(onClick = { viewModel.attachNote(sessionId, "attachment") }, modifier = Modifier.size(44.dp)) {
+                IconButton(onClick = { viewModel.attachNote(sessionId, "attachment") }, modifier = Modifier.size(48.dp)) {
                     Icon(Icons.Filled.Add, contentDescription = "添加附件", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Box(modifier = Modifier.weight(1f).padding(horizontal = 4.dp)) {
+                    // 注意：这里刻意不给键盘设 ImeAction.Send。ImeAction.Send 虽然是
+                    // 给聊天应用用的，但它会把回车键变成发送键；本输入框是多行
+                    // （maxLines = 5），用户还要靠回车换行写多行提示，所以回车
+                    // 保持换行，发送只走右边的蓝色发送钮，和 ChatGPT 类应用一致。
                     BasicTextField(
                         value = input,
                         onValueChange = { input = it },
@@ -417,13 +495,23 @@ fun ChatScreen(
                         decorationBox = { innerTextField ->
                             Box {
                                 if (input.isEmpty()) {
-                                    Text("尽管问，做个任务…", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    // 生成中时占位换成“正在回复…”，和视频里输入区的状态一致。
+                                    Text(
+                                        if (state.streaming) "正在回复…" else "尽管问，做个任务…",
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
                                 }
                                 innerTextField()
                             }
                         },
                     )
                 }
+                // 新视频的输入区模型药丸：点开换模型，之前在顶部的药丸改到这里。
+                CompactModelPill(
+                    text = if (state.model.isBlank()) "默认模型" else state.model,
+                    onClick = { modelDraft = state.model; showModelDialog = true },
+                )
                 val canSend = input.isNotBlank() && !state.streaming
                 val showStop = state.streaming
                 IconButton(
@@ -432,7 +520,7 @@ fun ChatScreen(
                         else if (input.isNotBlank()) { viewModel.send(sessionId, input); input = "" }
                     },
                     enabled = canSend || showStop,
-                    modifier = Modifier.size(44.dp),
+                    modifier = Modifier.size(48.dp),
                 ) {
                     Box(
                         modifier = Modifier.size(36.dp).clip(CircleShape)
