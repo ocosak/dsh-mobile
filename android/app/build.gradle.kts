@@ -16,8 +16,8 @@ android {
         targetSdk = 34
         // 每次发版必须同时升这两项，否则装上去的包在系统和设置页里
         // 还是旧版本号（v1.0.2 标签构建就栽在这里：gradle 仍是 1.0.1）。
-        versionCode = 3
-        versionName = "1.0.3"
+        versionCode = 4
+        versionName = "1.0.4"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
