@@ -262,7 +262,7 @@ fun ChatScreen(
             Spacer(modifier = Modifier.size(44.dp))
         }
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, bottom = 4.dp),
+            modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(sessionTitle, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
