@@ -65,6 +65,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -81,10 +82,11 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.foundation.text.ClickableText
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -116,7 +118,7 @@ private const val NEAR_BOTTOM_THRESHOLD = 2
 // 顶栏两侧占位：返回钮与右侧空白同宽，标题才能真正居中；两侧都用它，
 // 改一边尺寸时另一边不会忘改、标题不再偏。
 private val TopBarSideSize = 48.dp
-private const val SEND_BUTTON_SIZE = 36.dp
+private val SEND_BUTTON_SIZE = 36.dp
 
 private fun toolStatusText(status: ToolCall.Status): String = when (status) {
     ToolCall.Status.PENDING -> "待处理"
@@ -189,39 +191,57 @@ private fun stripUrlTail(url: String): String {
 // "[点击这里](" 与 ")" 会残成字面括号、网址本身成链接文本）；链接间的
 // 空隙走裸网址切分（见 appendUrlSplit）；无 scheme 的 www. 不认，避免把
 // 版本号之类误当链接。用户气泡与审批描述不走这里（纯文本 + 裸网址即可）。
-private fun inlineAnnotated(text: String, codeBg: Color): AnnotatedString {
+// 链接注解的 tag：经典字符串注解写法（项目 Compose 1.7 里没有 LinkAnnotation），
+// 渲染处用 ClickableText 按偏移取注解、走系统浏览器打开。
+private const val LINK_URL_TAG = "URL"
+
+// ClickableText 的 onClick 只给偏移：按偏移取 URL 注解，点中链接才打开，
+// 点中普通文字时注解为空、什么都不做（不吞点击、不误跳）。
+private fun openAnnotatedUrl(text: AnnotatedString, offset: Int, uriHandler: UriHandler) {
+    text.getStringAnnotations(LINK_URL_TAG, offset, offset).firstOrNull()?.let { uriHandler.openUri(it.item) }
+}
+
+private fun inlineAnnotated(text: String, codeBg: Color, linkColor: Color): AnnotatedString {
     val builder = AnnotatedString.Builder()
     var cursor = 0
     for (match in MdLinkRegex.findAll(text)) {
-        if (match.range.first > cursor) appendUrlSplit(builder, text.substring(cursor, match.range.first), codeBg)
+        if (match.range.first > cursor) appendUrlSplit(builder, text.substring(cursor, match.range.first), codeBg, linkColor)
         val linkText = match.groupValues[1]
         val linkUrl = match.groupValues[2]
         if (linkText.isNotBlank()) {
             // 链接文本走 appendMarkdown：粗体/斜体/代码在链接文本里同样生效；
             // 目标网址用括号界定的原文（不 strip——界定已精确，句末标点若在括号
             // 内就是作者写的地址本身，不像裸网址那样有歧义）。
-            builder.withLink(LinkAnnotation.Url(linkUrl)) {
-                appendMarkdown(builder, linkText, codeBg)
+            val linkStart = builder.length
+            appendMarkdown(builder, linkText, codeBg)
+            if (builder.length > linkStart) {
+                builder.addStringAnnotation(LINK_URL_TAG, linkUrl, linkStart, builder.length)
+                builder.addStyle(SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline), linkStart, builder.length)
             }
         } else {
             // 空链接文本回退裸网址处理：网址仍可点、括号字面，与此前行为一致。
-            appendUrlSplit(builder, match.value, codeBg)
+            appendUrlSplit(builder, match.value, codeBg, linkColor)
         }
         cursor = match.range.last + 1
     }
-    if (cursor < text.length) appendUrlSplit(builder, text.substring(cursor), codeBg)
+    if (cursor < text.length) appendUrlSplit(builder, text.substring(cursor), codeBg, linkColor)
     return builder.toAnnotatedString()
 }
 
 // 裸网址切分（原 inlineAnnotated 的主体）：先按网址切分，非网址段走
-// markdown 解析，网址段挂 LinkAnnotation（点开浏览器）。
-private fun appendUrlSplit(builder: AnnotatedString.Builder, text: String, codeBg: Color) {
+// markdown 解析，网址段挂字符串注解（渲染处 ClickableText 点开浏览器）。
+private fun appendUrlSplit(builder: AnnotatedString.Builder, text: String, codeBg: Color, linkColor: Color) {
     var cursor = 0
     for (match in UrlRegex.findAll(text)) {
         if (match.range.first > cursor) appendMarkdown(builder, text.substring(cursor, match.range.first), codeBg)
         val url = stripUrlTail(match.value)
         val tail = match.value.substring(url.length)
-        if (url.isNotBlank()) builder.withLink(LinkAnnotation.Url(url)) { append(url) }
+        if (url.isNotBlank()) {
+            val linkStart = builder.length
+            builder.append(url)
+            builder.addStringAnnotation(LINK_URL_TAG, url, linkStart, builder.length)
+            builder.addStyle(SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline), linkStart, builder.length)
+        }
         if (tail.isNotEmpty()) builder.append(tail)
         cursor = match.range.last + 1
     }
@@ -229,11 +249,10 @@ private fun appendUrlSplit(builder: AnnotatedString.Builder, text: String, codeB
 }
 
 // 用户气泡不解析 markdown（用户打的星号是原文），但网址同样可点。
-// linkColor 为空时走默认 Material 链接样式（系统蓝）：审批描述在浅灰底上
-// 用它正好；用户气泡是系统蓝底——默认蓝链接在蓝底上基本看不见（官方文档：
-// TextLinkStyles 为空时用 Material 默认样式，即主色），所以用户气泡调用处
-// 必须传 onPrimary（白字 + 下划线），链接在蓝底上才看得见、点得了。
-private fun linkified(text: String, linkColor: Color? = null): AnnotatedString {
+// 链接色调用处显式给：审批描述在浅灰底上用主色蓝；用户气泡是系统蓝底，
+// 蓝链接在蓝底上基本看不见，所以用户气泡调用处必须传 onPrimary（白字 +
+// 下划线），链接在蓝底上才看得见、点得了。
+private fun linkified(text: String, linkColor: Color): AnnotatedString {
     val builder = AnnotatedString.Builder()
     var cursor = 0
     for (match in UrlRegex.findAll(text)) {
@@ -241,9 +260,10 @@ private fun linkified(text: String, linkColor: Color? = null): AnnotatedString {
         val url = stripUrlTail(match.value)
         val tail = match.value.substring(url.length)
         if (url.isNotBlank()) {
-            val annotation = if (linkColor == null) LinkAnnotation.Url(url)
-            else LinkAnnotation.Url(url, TextLinkStyles(style = SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline)))
-            builder.withLink(annotation) { append(url) }
+            val linkStart = builder.length
+            builder.append(url)
+            builder.addStringAnnotation(LINK_URL_TAG, url, linkStart, builder.length)
+            builder.addStyle(SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline), linkStart, builder.length)
         }
         if (tail.isNotEmpty()) builder.append(tail)
         cursor = match.range.last + 1
@@ -324,7 +344,7 @@ private sealed interface AssistRow {
 // 渲染行预计算：流式生成时每来一个增量都会重组，整段 markdown 解析
 // （分块 + 逐字符号）若每次重组都重跑，长回复就是 O(n²)；remember 到
 // 文本与代码底色上，只有正文变了才重算，复制按钮等无关状态变化不再重跑。
-private fun parseAssistRows(text: String, codeBg: Color): List<AssistRow> {
+private fun parseAssistRows(text: String, codeBg: Color, linkColor: Color): List<AssistRow> {
     val rows = mutableListOf<AssistRow>()
     for (block in splitMdBlocks(text)) {
         if (block.code) {
@@ -345,24 +365,24 @@ private fun parseAssistRows(text: String, codeBg: Color): List<AssistRow> {
                 // 空的 28dp 标题行、正文里多一段空白 gap；落回正文分支按字面
                 // 显示 "# "，与“未匹配标记保持字面、不丢弃”的既定原则一致。
                 // 项目符号分支早已有同样的 isNotBlank 守卫，这里补齐标题分支。
-                trimmed.startsWith("# ") && trimmed.removePrefix("# ").isNotBlank() -> rows += AssistRow.Line(AssistRow.Kind.TITLE_LARGE, inlineAnnotated(trimmed.removePrefix("# "), codeBg))
-                trimmed.startsWith("## ") && trimmed.removePrefix("## ").isNotBlank() -> rows += AssistRow.Line(AssistRow.Kind.TITLE_MEDIUM, inlineAnnotated(trimmed.removePrefix("## "), codeBg))
-                trimmed.startsWith("### ") && trimmed.removePrefix("### ").isNotBlank() -> rows += AssistRow.Line(AssistRow.Kind.TITLE_MEDIUM, inlineAnnotated(trimmed.removePrefix("### "), codeBg))
-                trimmed.startsWith("#### ") && trimmed.removePrefix("#### ").isNotBlank() -> rows += AssistRow.Line(AssistRow.Kind.BOLD_BODY, inlineAnnotated(trimmed.removePrefix("#### "), codeBg))
+                trimmed.startsWith("# ") && trimmed.removePrefix("# ").isNotBlank() -> rows += AssistRow.Line(AssistRow.Kind.TITLE_LARGE, inlineAnnotated(trimmed.removePrefix("# "), codeBg, linkColor))
+                trimmed.startsWith("## ") && trimmed.removePrefix("## ").isNotBlank() -> rows += AssistRow.Line(AssistRow.Kind.TITLE_MEDIUM, inlineAnnotated(trimmed.removePrefix("## "), codeBg, linkColor))
+                trimmed.startsWith("### ") && trimmed.removePrefix("### ").isNotBlank() -> rows += AssistRow.Line(AssistRow.Kind.TITLE_MEDIUM, inlineAnnotated(trimmed.removePrefix("### "), codeBg, linkColor))
+                trimmed.startsWith("#### ") && trimmed.removePrefix("#### ").isNotBlank() -> rows += AssistRow.Line(AssistRow.Kind.BOLD_BODY, inlineAnnotated(trimmed.removePrefix("#### "), codeBg, linkColor))
                 (trimmed.startsWith("- ") || trimmed.startsWith("* ") || trimmed.startsWith("+ ")) && trimmed.substring(2).isNotBlank() ->
-                    rows += AssistRow.Line(AssistRow.Kind.BULLET, inlineAnnotated(trimmed.substring(2), codeBg))
+                    rows += AssistRow.Line(AssistRow.Kind.BULLET, inlineAnnotated(trimmed.substring(2), codeBg, linkColor))
                 // 引用行（单层 "> "，与项目符号同款单层、不分层级）：
                 // 余文为空（如单独一行 "> "）落回正文按字面显示，与标题/项目
                 // 符号的空余文守卫同款；">text"（无空格）与 ">>" 嵌套不认、
                 // 按正文原样显示，不丢内容。
                 trimmed.startsWith("> ") && trimmed.removePrefix("> ").isNotBlank() ->
-                    rows += AssistRow.Line(AssistRow.Kind.QUOTE, inlineAnnotated(trimmed.removePrefix("> "), codeBg))
+                    rows += AssistRow.Line(AssistRow.Kind.QUOTE, inlineAnnotated(trimmed.removePrefix("> "), codeBg, linkColor))
                 // 分隔线（整行 3 个以上同种字符 -/*/_，CommonMark 的 HR）：
                 // 不是项目符号（无空格）也不是正文，单独成行时几乎必是分隔线；
                 // 行内出现（如 "a---b"）或不足 3 个（如 "--"）不认，仍走正文。
                 (trimmed.length >= 3 && (trimmed.all { it == '-' } || trimmed.all { it == '*' } || trimmed.all { it == '_' })) ->
                     rows += AssistRow.Line(AssistRow.Kind.HR, AnnotatedString(""))
-                else -> rows += AssistRow.Line(AssistRow.Kind.BODY, inlineAnnotated(line, codeBg))
+                else -> rows += AssistRow.Line(AssistRow.Kind.BODY, inlineAnnotated(line, codeBg, linkColor))
             }
         }
     }
@@ -372,7 +392,9 @@ private fun parseAssistRows(text: String, codeBg: Color): List<AssistRow> {
 @Composable
 private fun AssistantMessageText(text: String) {
     val codeBg = MaterialTheme.colorScheme.surfaceVariant
-    val rows = remember(text, codeBg) { parseAssistRows(text, codeBg) }
+    val linkColor = MaterialTheme.colorScheme.primary
+    val uriHandler = LocalUriHandler.current
+    val rows = remember(text, codeBg, linkColor) { parseAssistRows(text, codeBg, linkColor) }
     Column {
         for (row in rows) {
             when (row) {
@@ -400,13 +422,13 @@ private fun AssistantMessageText(text: String) {
                     // 消息内的 markdown 标题同样给 heading 语义：页标题与分组头
                     // 已有 heading（R228），消息正文里的标题不给、TalkBack 就没法
                     // 按标题在长回复里跳转。
-                    AssistRow.Kind.TITLE_LARGE -> Text(row.text, style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
-                    AssistRow.Kind.TITLE_MEDIUM -> Text(row.text, style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
-                    AssistRow.Kind.BOLD_BODY -> Text(row.text, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold))
+                    AssistRow.Kind.TITLE_LARGE -> ClickableText(row.text, style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() }, onClick = { offset -> openAnnotatedUrl(row.text, offset, uriHandler) })
+                    AssistRow.Kind.TITLE_MEDIUM -> ClickableText(row.text, style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() }, onClick = { offset -> openAnnotatedUrl(row.text, offset, uriHandler) })
+                    AssistRow.Kind.BOLD_BODY -> ClickableText(row.text, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold), onClick = { offset -> openAnnotatedUrl(row.text, offset, uriHandler) })
                     AssistRow.Kind.BULLET -> Row(verticalAlignment = Alignment.Top) {
                         Text("•", style = MaterialTheme.typography.bodyLarge)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text(row.text, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                        ClickableText(row.text, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f), onClick = { offset -> openAnnotatedUrl(row.text, offset, uriHandler) })
                     }
                     // 引用：灰色 3dp 竖线 + 8dp 间隙，与项目符号的“• + 8dp”
                     // 同宽节奏；Row 定高 IntrinsicSize.Max 使竖线（fillMaxHeight）
@@ -418,7 +440,7 @@ private fun AssistantMessageText(text: String) {
                                 .background(MaterialTheme.colorScheme.onSurfaceVariant, RoundedCornerShape(1.5.dp)),
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text(row.text, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                        ClickableText(row.text, style = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurfaceVariant), modifier = Modifier.weight(1f), onClick = { offset -> openAnnotatedUrl(row.text, offset, uriHandler) })
                     }
                     // 分隔线：1dp 细线 + 上下 8dp 间隙，与代码块的 vertical 8dp
                     // 同节奏；细线用 outline（与标签栏分隔线同款语义色，1dp 在
@@ -428,7 +450,7 @@ private fun AssistantMessageText(text: String) {
                         modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp).height(1.dp)
                             .background(MaterialTheme.colorScheme.outline),
                     )
-                    AssistRow.Kind.BODY -> Text(row.text, style = MaterialTheme.typography.bodyLarge)
+                    AssistRow.Kind.BODY -> ClickableText(row.text, style = MaterialTheme.typography.bodyLarge, onClick = { offset -> openAnnotatedUrl(row.text, offset, uriHandler) })
                 }
             }
         }
@@ -517,6 +539,10 @@ fun ChatScreen(
     // 只在输入框空白时恢复：失败到达前用户若已打了新字，无条件恢复会把新字
     // 覆盖掉（旧文本已在列表里以用户气泡留着，丢的只是预填便利；新字是当前
     // 意图，优先保新字）；跳过恢复时仍清掉草稿，不留过期状态。
+    // 输入框焦点：快捷药丸填入与失败草稿恢复时直接聚焦，用户不用再点一次输入框。
+    // 声明必须在首次使用（失败草稿恢复的 LaunchedEffect）之前：同一函数内后声明的
+    // 局部变量在前面用不到，编译报找不到。
+    val inputFocus = remember { FocusRequester() }
     val failedDraft = state.failedDraft
     LaunchedEffect(failedDraft) {
         if (failedDraft != null && failedDraft.first == sessionId) {
@@ -553,8 +579,7 @@ fun ChatScreen(
     // 以前转屏会把已展开的长历史重新折起来。
     var showAll by rememberSaveable(sessionId) { mutableStateOf(false) }
     val clipboardManager = LocalClipboardManager.current
-    // 输入框焦点：快捷药丸填入与失败草稿恢复时直接聚焦，用户不用再点一次输入框。
-    val inputFocus = remember { FocusRequester() }
+    val uriHandler = LocalUriHandler.current
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
 
@@ -738,13 +763,15 @@ fun ChatScreen(
                         ) {
                             // 用户气泡也可框选：以前只有助手正文包 SelectionContainer，
                             // 自己发的话想复制一段只能整条靠记忆重打。
+                            val userAnnotated = linkified(msg.text, MaterialTheme.colorScheme.onPrimary)
                             SelectionContainer {
                                 // 用户气泡不解析 markdown，但网址同样可点（与助手一致）；
-                                // 链接色显式给 onPrimary（见 linkified 注释，默认蓝链接在蓝底上看不见）。
-                                Text(
-                                    text = linkified(msg.text, MaterialTheme.colorScheme.onPrimary),
+                                // 链接色显式给 onPrimary（见 linkified 注释，蓝链接在蓝底上看不见）。
+                                ClickableText(
+                                    text = userAnnotated,
                                     style = MaterialTheme.typography.bodyLarge,
                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                    onClick = { offset -> openAnnotatedUrl(userAnnotated, offset, uriHandler) },
                                 )
                             }
                         }
@@ -867,7 +894,8 @@ fun ChatScreen(
                     if (approval.description.isNotBlank()) {
                         // 审批描述里的网址也可点：描述常带主机给出的文档/操作链接，
                         // 点开核对再决定允不允许，比纯文本更利于知情决策。
-                        Text(linkified(approval.description), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
+                        val approvalAnnotated = linkified(approval.description, MaterialTheme.colorScheme.primary)
+                        ClickableText(approvalAnnotated, style = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurfaceVariant), modifier = Modifier.padding(top = 8.dp), onClick = { offset -> openAnnotatedUrl(approvalAnnotated, offset, uriHandler) })
                     }
                     Row(modifier = Modifier.padding(top = 16.dp)) {
                         // 允许是破坏性动作（主机会执行命令/读写文件）：按 HIG 破坏性动作用红，

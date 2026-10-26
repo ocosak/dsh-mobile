@@ -77,8 +77,8 @@ private const val INVALID_BASE_MSG = "服务器地址不对：填 http:// 或 ht
 // 状态码必须按独立数字匹配：以前是子串匹配，端口号里的 1401、错误号里的
 // 4012 也会误判成凭据失效（甚至把一次连接失败指成“清凭据重配”，方向全错）。
 // 翻译后的文案里只有 HTTP 码带数字（如 "HTTP 401"），独立匹配不受影响。
-private val AuthCodeRegex = Regex("(?<!\d)(401|403)(?!\d)")
-private val NotFoundCodeRegex = Regex("(?<!\d)404(?!\d)")
+private val AuthCodeRegex = Regex("""(?<!\d)(401|403)(?!\d)""")
+private val NotFoundCodeRegex = Regex("""(?<!\d)404(?!\d)""")
 private fun authHint(msg: String): String =
     if (AuthCodeRegex.containsMatchIn(msg) ||
         msg.contains("Unauthorized", ignoreCase = true) || msg.contains("Forbidden", ignoreCase = true)

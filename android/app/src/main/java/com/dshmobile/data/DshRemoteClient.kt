@@ -4,6 +4,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.invokeOnCancellation
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
@@ -311,7 +312,7 @@ class DshRemoteClient(
                 val wrapped = try {
                     parseSessions(body).firstOrNull()
                 } catch (_: Exception) { null }
-                val directId = bodyJson?.optString("id").trim().orEmpty()
+                val directId = bodyJson?.optString("id")?.trim().orEmpty()
                 // 包裹对象 id 为空时不能短路整条链：以前 nested 非空就直接取它，
                 // 哪怕它的 id 是空串，顶层直接 id 有效也会被跳过、白白报“没有会话 id”。
                 (nested?.takeIf { it.id.isNotBlank() } ?: wrapped?.takeIf { it.id.isNotEmpty() } ?: DshSession(id = directId, title = title))

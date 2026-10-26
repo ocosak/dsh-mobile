@@ -268,7 +268,7 @@ private const val TYPING_DOT_COUNT = 3
 // 输入框只剩约 52dp，打字要一直换行；80dp 时药丸约 132dp、输入框约 68dp，
 // 仍窄但可用；完整模型名在弹层输入框里可见，药丸截断不丢信息（4 字中文
 // “默认模型”约 64dp，80dp 内完整显示）。
-private const val MODEL_PILL_MAX_WIDTH = 80.dp
+private val MODEL_PILL_MAX_WIDTH = 80.dp
 
 // 减动效：系统“移除动画”（动画缩放为 0）时返回 true；记住一次，
 // 避免设置变化导致组合内动画调用次数变化。

@@ -7,7 +7,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -281,7 +281,9 @@ private fun RowScope.IosTabItem(
         modifier = Modifier.weight(1f).clip(MaterialTheme.shapes.small)
             .clickable(role = Role.Button) { onClick() }
             // 选中态要报出来：以前 TalkBack 只读“会话，按钮”，听不出当前在哪个标签。
-            .semantics { selected = selected }
+            // 这版 Compose 里 selected 扩展属性只有 getter、不能赋值，改按语义键
+            // 直接写，TalkBack 读到的选中态不变。
+            .semantics { this[SemanticsProperties.Selected] = selected }
             .padding(vertical = 4.dp),
         contentAlignment = Alignment.Center,
     ) {

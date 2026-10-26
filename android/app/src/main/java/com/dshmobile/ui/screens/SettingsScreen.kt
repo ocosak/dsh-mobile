@@ -91,7 +91,7 @@ fun SettingsScreen(
                     // （草稿），用户改了地址还没点保存时，状态行若读 state 就会把
                     // 没保存的草稿当成已连接地址显示；读 store 的才是真正配对的地址。
                     // 保存/配对成功都会同步 state 并触发重组，读 store 总是 fresh。
-                    subtitle = store.serverUrl?.trim().ifBlank { "尚未连接主机" },
+                    subtitle = store.serverUrl?.trim().orEmpty().ifBlank { "尚未连接主机" },
                 )
             }
             Column(modifier = Modifier.padding(top = 12.dp)) {
