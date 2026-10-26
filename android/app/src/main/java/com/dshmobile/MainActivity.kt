@@ -3,23 +3,31 @@ package com.dshmobile
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -82,56 +90,16 @@ fun DshApp(store: PairingStore, api: DshRemoteClient) {
     // 聊天模型初始值与设置页保存的值一致。
     LaunchedEffect(Unit) { chatVm.setModel(store.model.orEmpty()) }
 
-    // 极简底部导航：细分割线 + 素色底，不用悬浮毛玻璃条，
-    // 选中项黑/白、未选中灰，无 Material 药丸指示器。
-    Scaffold(
-        bottomBar = {
-            val backStack by navController.currentBackStackEntryAsState()
-            val current = backStack?.destination?.route
-            Column {
-                HorizontalDivider(color = MaterialTheme.colorScheme.outline)
-                NavigationBar(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    tonalElevation = 0.dp,
-                ) {
-                    tabs.forEach { tab ->
-                        NavigationBarItem(
-                            selected = current == tab.route,
-                            onClick = {
-                                navController.navigate(tab.route) {
-                                    launchSingleTop = true
-                                    restoreState = true
-                                    popUpTo(navController.graph.startDestinationId) { saveState = true }
-                                }
-                            },
-                            icon = {
-                                Icon(
-                                    imageVector = when (tab) {
-                                        Tab.Pair -> Icons.Filled.Link
-                                        Tab.Sessions -> Icons.Filled.Home
-                                        Tab.Settings -> Icons.Filled.Settings
-                                    },
-                                    contentDescription = tab.label,
-                                )
-                            },
-                            label = { Text(tab.label) },
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = MaterialTheme.colorScheme.primary,
-                                selectedTextColor = MaterialTheme.colorScheme.primary,
-                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                indicatorColor = Color.Transparent,
-                            ),
-                        )
-                    }
-                }
-            }
-        },
-    ) { padding ->
+    // 标准 iOS 标签栏：贴底、半透明底 + 顶部细分隔线，不再是悬浮药丸；
+    // 进聊天详情页时按 iOS 规范隐藏标签栏，靠聊天页左上角返回。
+    val backStack by navController.currentBackStackEntryAsState()
+    val current = backStack?.destination?.route
+    val showTabBar = current == Tab.Pair.route || current == Tab.Sessions.route || current == Tab.Settings.route
+    Box(modifier = Modifier.fillMaxSize()) {
         NavHost(
             navController = navController,
             startDestination = if (store.isPaired) Tab.Sessions.route else Tab.Pair.route,
-            modifier = Modifier.padding(padding),
+            modifier = Modifier.fillMaxSize(),
         ) {
             composable(Tab.Pair.route) {
                 PairingScreen(pairingVm, onPaired = {
@@ -171,6 +139,83 @@ fun DshApp(store: PairingStore, api: DshRemoteClient) {
             composable(Tab.Settings.route) {
                 SettingsScreen(pairingVm, store) { model -> chatVm.setModel(model) }
             }
+        }
+        if (showTabBar) {
+            IosTabBar(
+                current = current,
+                tabs = tabs,
+                onTab = { tab ->
+                    navController.navigate(tab.route) {
+                        launchSingleTop = true
+                        restoreState = true
+                        popUpTo(navController.graph.startDestinationId) { saveState = true }
+                    }
+                },
+                modifier = Modifier.align(Alignment.BottomCenter),
+            )
+        }
+    }
+}
+
+/** 标准 iOS 标签栏：贴底、半透明底、顶部 0.5dp 细分隔线；选中系统蓝，未选中灰。 */
+@Composable
+private fun IosTabBar(
+    current: String?,
+    tabs: List<Tab>,
+    onTab: (Tab) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier.fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)),
+    ) {
+        HorizontalDivider(color = MaterialTheme.colorScheme.outline, thickness = 0.5.dp)
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+        ) {
+            tabs.forEach { tab ->
+                IosTabItem(
+                    selected = current == tab.route,
+                    icon = when (tab) {
+                        Tab.Pair -> Icons.Filled.Link
+                        Tab.Sessions -> Icons.Filled.Home
+                        Tab.Settings -> Icons.Filled.Settings
+                    },
+                    label = tab.label,
+                    onClick = { onTab(tab) },
+                )
+            }
+        }
+    }
+}
+
+/** 标签栏单项：图标 24dp + 10pt 标签，无药丸、无光晕、无阴影。 */
+@Composable
+private fun RowScope.IosTabItem(
+    selected: Boolean,
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier.weight(1f).clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
+            .clickable { onClick() }
+            .padding(vertical = 4.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(
+                icon,
+                contentDescription = label,
+                tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(24.dp),
+            )
+            Text(
+                label,
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

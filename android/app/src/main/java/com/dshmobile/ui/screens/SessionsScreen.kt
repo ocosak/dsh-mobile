@@ -49,7 +49,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.dshmobile.data.DshSession
 import com.dshmobile.ui.SessionsViewModel
-import com.dshmobile.ui.theme.DeepSeekBlue
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -124,7 +123,8 @@ fun SessionsScreen(
         )
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    // 底部给标准 iOS 标签栏留出空隙，内容不会被它盖住。
+    Column(modifier = Modifier.fillMaxSize().padding(bottom = 72.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 12.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -227,7 +227,7 @@ fun SessionsScreen(
                 onClick = { viewModel.create("") },
                 modifier = Modifier.height(48.dp),
                 shape = RoundedCornerShape(28.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = DeepSeekBlue, contentColor = Color.White),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = Color.White),
             ) {
                 Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(4.dp))

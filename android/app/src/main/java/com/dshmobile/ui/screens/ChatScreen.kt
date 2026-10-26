@@ -24,7 +24,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Stop
@@ -165,9 +167,9 @@ private fun AssistantMessageText(text: String) {
 }
 
 /**
- * 对话页（参考 Codex iOS 对话页布局）：顶部返回 + 标题 + 模型，
- * 用户消息黑色气泡、AI 回复纯文本不套气泡；历史多时先只看最近
- * 几条，点“查看更早的消息”再展开；底部圆角输入框。
+ * 对话页（标准 iOS + 视频里的 Kimi 顶部药丸）：左上角返回、居中模型药丸、
+ * 用户消息系统蓝气泡、AI 回复纯文本不套气泡；历史多时先只看最近
+ * 几条，点“查看更早的消息”再展开；底部药丸输入框。
  */
 @Composable
 fun ChatScreen(
@@ -240,26 +242,30 @@ fun ChatScreen(
         )
     }
 
+    // 标签栏在聊天详情页按 iOS 规范隐藏，这里不再给它留 96dp 空隙。
     Column(modifier = Modifier.fillMaxSize().imePadding()) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onBack, modifier = Modifier.size(44.dp)) {
-                Icon(Icons.Filled.ArrowBack, contentDescription = "返回")
+                Icon(Icons.Filled.ChevronLeft, contentDescription = "返回")
             }
-            Column(modifier = Modifier.weight(1f)) {
-                Text(sessionTitle, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(
+            // 居中模型药丸：视频顶部“K3.1 Pro 极速”那种选择器，点开换模型。
+            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                ModelPill(
                     text = if (state.streaming) "生成中…" else if (state.model.isBlank()) "默认模型" else state.model,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.clickable { modelDraft = state.model; showModelDialog = true },
+                    onClick = { modelDraft = state.model; showModelDialog = true },
                 )
             }
-            IconButton(onClick = { modelDraft = state.model; showModelDialog = true }, modifier = Modifier.size(44.dp)) {
-                Icon(Icons.Filled.Edit, contentDescription = "切换模型")
-            }
+            // 右侧留一个 44dp 占位，让药丸真正居中。
+            Spacer(modifier = Modifier.size(44.dp))
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(sessionTitle, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outline)
         LazyColumn(
@@ -377,11 +383,21 @@ fun ChatScreen(
         state.message?.let {
             Text(text = it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp))
         }
-        // 悬浮圆角输入框：+ 附件、多行输入、黑色圆形发送键。
+        // 空会话时的快捷药丸：视频里输入框上方那排，点一下只填入输入框，不假装已执行。
+        if (state.messages.isEmpty()) {
+            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
+                QuickActionPill(icon = Icons.Filled.Code, text = "解释代码", onClick = { input = "帮我解释这段代码" })
+                Spacer(modifier = Modifier.width(8.dp))
+                QuickActionPill(icon = Icons.Filled.Edit, text = "写个脚本", onClick = { input = "帮我写一个脚本" })
+                Spacer(modifier = Modifier.width(8.dp))
+                QuickActionPill(icon = Icons.Filled.Description, text = "总结内容", onClick = { input = "帮我总结这段内容" })
+            }
+        }
+        // Kimi 式药丸输入框：白底 + 细边线，+ 附件、多行输入、系统蓝圆形发送键。
         Surface(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
             shape = RoundedCornerShape(28.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant,
+            color = MaterialTheme.colorScheme.surface,
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
         ) {
             Row(
@@ -401,7 +417,7 @@ fun ChatScreen(
                         decorationBox = { innerTextField ->
                             Box {
                                 if (input.isEmpty()) {
-                                    Text("问智能体…", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text("尽管问，做个任务…", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                                 innerTextField()
                             }

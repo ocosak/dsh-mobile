@@ -5,7 +5,9 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,31 +20,39 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.dshmobile.ui.theme.IosGreen
 
-/** 大标题：页面顶部，中文标题 + 可选副标题。 */
+/** 大标题：iOS Large Title，34pt 粗体，页面顶部。 */
 @Composable
 fun LargeTitle(text: String, subtitle: String? = null, modifier: Modifier = Modifier) {
     Column(modifier = modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
-        Text(text = text, style = MaterialTheme.typography.titleLarge)
+        Text(text = text, style = MaterialTheme.typography.displayLarge)
         if (!subtitle.isNullOrEmpty()) {
             Text(
                 text = subtitle,
@@ -54,7 +64,7 @@ fun LargeTitle(text: String, subtitle: String? = null, modifier: Modifier = Modi
     }
 }
 
-/** 分组小标题：灰色小字，不用卡片。 */
+/** 分组小标题：iOS 分组头，灰色小字，不用卡片。 */
 @Composable
 fun SectionLabel(text: String, modifier: Modifier = Modifier) {
     Text(
@@ -65,7 +75,103 @@ fun SectionLabel(text: String, modifier: Modifier = Modifier) {
     )
 }
 
-/** 素色输入框：12dp 圆角，灰色边框，聚焦时黑/白边框，44dp 以上触控高度。 */
+/** iOS 分组卡片：白底 12dp 圆角，放在分组灰底上（Kimi 设置页的卡片语言）。 */
+@Composable
+fun IosCard(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surface,
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) { content() }
+    }
+}
+
+/**
+ * iOS 分组行：左标题、右灰色值 + 箭头，行间细分隔线。
+ * 对照视频里“思考等级 极致 >”“对话长度 标准 >”那类设置行。
+ */
+@Composable
+fun IosListRow(
+    title: String,
+    value: String? = null,
+    onClick: (() -> Unit)? = null,
+    showDivider: Boolean = true,
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth()
+            .clickable(enabled = onClick != null) { onClick?.invoke() },
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+            if (!value.isNullOrEmpty()) {
+                Text(
+                    value,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+            }
+            if (onClick != null) {
+                Icon(
+                    Icons.Filled.ChevronRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+        }
+        if (showDivider) {
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline, modifier = Modifier.padding(start = 0.dp))
+        }
+    }
+}
+
+/** 顶部居中模型药丸：视频里“K3.1 Pro 极速”那种顶部选择器，点开换模型。 */
+@Composable
+fun ModelPill(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier.clickable { onClick() },
+        shape = RoundedCornerShape(28.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(text, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Spacer(modifier = Modifier.width(2.dp))
+            Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null, modifier = Modifier.size(20.dp))
+        }
+    }
+}
+
+/** 输入框上方的快捷药丸：视频里“新项目 / 3D Make / PPT”那排，点一下只填入输入框，不假装已执行。 */
+@Composable
+fun QuickActionPill(icon: ImageVector, text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier.clickable { onClick() },
+        shape = RoundedCornerShape(28.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(text, style = MaterialTheme.typography.labelLarge)
+        }
+    }
+}
+
+/** 素色输入框：10dp 圆角，细分隔线边框，聚焦时系统蓝边框，44dp 以上触控高度。 */
 @Composable
 fun AppTextField(
     value: String,
@@ -83,7 +189,7 @@ fun AppTextField(
         singleLine = singleLine,
         visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None,
         textStyle = TextStyle(fontSize = 16.sp, lineHeight = 22.sp),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(10.dp),
         colors = OutlinedTextFieldDefaults.colors(
             focusedBorderColor = MaterialTheme.colorScheme.primary,
             unfocusedBorderColor = MaterialTheme.colorScheme.outline,
@@ -91,7 +197,7 @@ fun AppTextField(
     )
 }
 
-/** 主按钮：素色黑/白，44dp 以上高度，12dp 圆角。 */
+/** 主按钮：iOS 系统蓝填充，44dp 以上高度，12dp 圆角。 */
 @Composable
 fun PrimaryButton(
     text: String,
@@ -183,13 +289,13 @@ fun TypingIndicator(modifier: Modifier = Modifier) {
     }
 }
 
-/** 配对状态：绿点已配对 / 灰点未配对。 */
+/** 配对状态：iOS 绿点已配对 / 灰点未配对。 */
 @Composable
 fun StatusPill(paired: Boolean, modifier: Modifier = Modifier) {
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
         Box(
             modifier = Modifier.size(8.dp).clip(CircleShape)
-                .background(if (paired) Color(0xFF34C759) else MaterialTheme.colorScheme.onSurfaceVariant),
+                .background(if (paired) IosGreen else MaterialTheme.colorScheme.onSurfaceVariant),
         )
         Spacer(modifier = Modifier.width(6.dp))
         Text(
